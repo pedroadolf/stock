@@ -1,0 +1,160 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* ─── Tailwind Theme Extension ─────────────────────────────────────── */
+@theme {
+  --color-stock-accent:     #F59E0B;
+  --color-stock-dark:       #0F172A;
+  --color-stock-border-col: #334155;
+  --color-stock-danger:     #EF4444;
+  --color-stock-success:    #10B981;
+  --color-stock-white:      #FFFFFF;
+
+  --color-fintech-navy:    #020617;
+  --color-fintech-surface: #1E293B;
+  --color-fintech-cyan:    #06B6D4;
+  --color-fintech-indigo:  #6366F1;
+
+  --color-stock-bg:         var(--stock-bg);
+  --color-stock-bg-panel:   var(--stock-bg-panel);
+  --color-stock-card:       var(--stock-card);
+  --color-stock-text:       var(--stock-text);
+  --color-stock-text-muted: var(--stock-text-muted);
+  --color-stock-border:     var(--stock-border);
+  --color-stock-shadow:     var(--stock-shadow);
+
+  --font-plus-jakarta: var(--font-plus-jakarta-sans);
+  --font-inter:        var(--font-inter);
+}
+
+/* ─── Dark Theme ──────────────────────────────────────────────────── */
+:root, [data-theme='dark'] {
+  --stock-bg:          #0B0F19;   /* Deep Navy Black */
+  --stock-bg-panel:    #111827;   /* Slate 900 */
+  --stock-card:        #1F2937;   /* Slate 800 */
+  --stock-text:        #F9FAFB;   /* Off-white */
+  --stock-text-muted:  #9CA3AF;   /* Muted gray */
+  --stock-border:      rgba(255, 255, 255, 0.08);
+  --stock-shadow:      0 4px 20px rgba(0, 0, 0, 0.40);
+  --stock-shadow-lg:   0 16px 48px rgba(0, 0, 0, 0.60);
+
+  --stock-radius:      24px;
+}
+
+/* ─── Light Theme ─────────────────────────────────────────────────── */
+[data-theme='light'] {
+  --stock-bg:          #F3F4F6;   /* Cool light grey */
+  --stock-bg-panel:    #FFFFFF;   /* Pure white */
+  --stock-card:        #FFFFFF;   /* Pure white */
+  --stock-text:        #111827;   /* Slate 900 */
+  --stock-text-muted:  #6B7280;   /* Gray 500 */
+  --stock-border:      rgba(17, 24, 39, 0.08);
+  --stock-shadow:      0 4px 12px rgba(0, 0, 0, 0.03);
+  --stock-shadow-lg:   0 12px 32px rgba(0, 0, 0, 0.08);
+}
+
+/* ─── Base Styles ──────────────────────────────────────────────────── */
+@layer base {
+  body {
+    @apply transition-colors duration-300;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: var(--stock-bg);
+    color: var(--stock-text);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+}
+
+/* ─── GoStock Components ──────────────────────────────────────────── */
+@layer utilities {
+  .gostock-box {
+    background-color: var(--stock-bg-panel);
+    border: 1px solid var(--stock-border);
+    border-radius: var(--stock-radius);
+    box-shadow: var(--stock-shadow);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .gostock-card {
+    background-color: var(--stock-card);
+    border: 1px solid var(--stock-border);
+    border-radius: 16px;
+    box-shadow: var(--stock-shadow);
+    transition: all 0.3s ease;
+  }
+
+  .gostock-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--stock-shadow-lg);
+  }
+
+  .gostock-sidebar-link {
+    @apply flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold transition-all;
+    color: var(--stock-text-muted);
+  }
+
+  .gostock-sidebar-link:hover {
+    color: var(--stock-text);
+    background-color: rgba(245, 158, 11, 0.08);
+  }
+
+  .gostock-sidebar-link.active {
+    color: var(--stock-text);
+    background-color: rgba(245, 158, 11, 0.12);
+    border-left: 4px solid #F59E0B;
+  }
+
+  .gostock-badge-success {
+    background-color: rgba(16, 185, 129, 0.12);
+    color: #10B981;
+    border-radius: 99px;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .gostock-badge-danger {
+    background-color: rgba(239, 68, 68, 0.12);
+    color: #EF4444;
+    border-radius: 99px;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .gostock-btn-primary {
+    background-color: #F59E0B;
+    color: #0F172A;
+    font-weight: 700;
+    border-radius: 12px;
+    padding: 8px 16px;
+    transition: all 0.2s ease;
+    font-size: 13px;
+  }
+
+  .gostock-btn-primary:hover {
+    background-color: #D97706;
+    box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 99px;
+  }
+
+  [data-theme='light'] .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.1);
+  }
+}

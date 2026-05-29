@@ -1,0 +1,18 @@
+project_id = "stock-default"
+
+[api]
+port = 54321
+external_url = "https://supabase.pash.uno"
+
+[db]
+port = 5432
+shadow_database_url = ""
+
+[auth]
+enabled = true
+site_url = "https://stock.pash.uno"
+additional_redirect_urls = ["https://localhost:3000"]
+
+[storage]
+enabled = true
+storage_id = "documentos_soporte"

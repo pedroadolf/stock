@@ -1,0 +1,108 @@
+# =============================================
+# .gitignore — Stock Monorepo (Inversiones)
+# =============================================
+
+# === macOS ===
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# === IDE / Editors ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+
+# === Node.js / Next.js ===
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-error.log*
+yarn-debug.log*
+pnpm-debug.log*
+.pnpm-store/
+.npm/
+
+# Next.js build
+.next/
+**/.next/
+out/
+build/
+dist/
+
+# Turbo / Vercel
+.turbo/
+.vercel/
+
+# Cache
+.cache/
+.parcel-cache/
+
+# === Python / Agent ===
+venv/
+.venv/
+env/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+htmlcov/
+.coverage
+apps/backend/venv/
+
+# === Environment Variables ===
+.env
+.env.local
+.env.*.local
+.env.production
+
+# === Logs ===
+*.log
+logs/
+*.log.*
+
+# === Databases locales ===
+*.sqlite
+*.sqlite3
+*.db
+
+# === Temporales / Backup ===
+*.bak
+*.tmp
+*.temp
+*.orig
+temp.json
+*test_payload*
+*updated_workflow*
+test_*.js
+
+# === Docker (archivos generados) ===
+docker-compose.override.yml
+
+# === Antigravity / Agent artifacts ===
+.antigravity/
+artifacts/
+scratch/
+
+# === Coverage / Testing ===
+coverage/
+.nyc_output/
+
+# === Data (solo local) ===
+data/
+
+# === Apps específicas ===
+apps/*/node_modules/
+apps/*/.next/
+apps/*/out/
+apps/*/dist/
+apps/*/build/
+apps/backend/__pycache__/

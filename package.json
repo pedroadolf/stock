@@ -1,0 +1,25 @@
+{
+  "name": "stock-monorepo",
+  "version": "1.0.0",
+  "packageManager": "npm@10.8.2",
+  "description": "Inversiones y Trading App (Stock) - Monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "apps/backend"
+  ],
+  "scripts": {
+    "dev": "turbo run dev --filter=web",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "clean": "turbo clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.1",
+    "pg": "^8.20.0"
+  }
+}

@@ -1,0 +1,17 @@
+node_modules
+.next
+out
+dist
+build
+.env
+.env.local
+.env.production
+.git
+.gitignore
+README.md
+docs
+**/node_modules
+**/.next
+**/out
+**/dist
+**/build

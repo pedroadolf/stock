@@ -1,0 +1,21 @@
+# Core Agent Framework
+langgraph>=0.0.26
+langchain-core>=0.1.30
+langchain-google-genai>=0.0.10
+
+# Memory & Vector DB
+chromadb>=0.4.24
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.5
+playwright>=1.41.2
+
+# MCP SDK
+mcp-agent>=0.1.0
+
+# API / Database / Financial
+fastapi>=0.100.0
+uvicorn>=0.23.0
+supabase>=2.0.0
+yfinance>=0.2.38 # Yahoo Finance API client
