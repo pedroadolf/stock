@@ -94,6 +94,22 @@ export const backendApi = {
       pnl_percent: number;
       is_manual: boolean;
     }>;
+    lots: Array<{
+      id: string;
+      fecha_adquisicion: string;
+      ticker: string;
+      nombre: string;
+      seccion: string;
+      cantidad: number;
+      precio_compra: number;
+      precio_actual: number;
+      costo_total: number;
+      valor_actual: number;
+      pnl: number;
+      pnl_percent: number;
+      peso_portafolio: number;
+      is_manual: boolean;
+    }>;
     secciones: Array<{
       nombre_seccion: string;
       porcentaje_objetivo: number;
