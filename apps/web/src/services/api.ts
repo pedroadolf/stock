@@ -168,6 +168,16 @@ export const backendApi = {
   },
 
   /**
+   * Elimina un portafolio y todas sus operaciones (cascada).
+   */
+  async deletePortfolio(portfolioId: string, userId: string): Promise<{ success: boolean; message?: string }> {
+    return fetchFromBackend(`/api/trades/portfolio/${encodeURIComponent(portfolioId)}`, {
+      method: 'DELETE',
+      headers: { 'User-ID': userId },
+    });
+  },
+
+  /**
    * Calcula la distribución de rebalanceo sugerida
    */
   async calculateRebalance(

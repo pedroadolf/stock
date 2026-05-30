@@ -161,6 +161,27 @@ def delete_operation_endpoint(
     return result
 
 
+@router.delete("/portfolio/{portfolio_id}")
+def delete_portfolio_endpoint(
+    portfolio_id: str,
+    user_id: Optional[str] = Header(None, alias="User-ID", description="El ID del usuario propietario"),
+    supabase_client = Depends(get_supabase_client)
+):
+    """
+    Elimina un portafolio y todas sus operaciones (cascada).
+    """
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Header 'User-ID' es requerido para aislamiento de inquilinos")
+        
+    handler = MCPRequestHandler(supabase_client)
+    result = handler.delete_portfolio(portfolio_id, user_id)
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=result.get("status_code", 400), detail=result.get("error"))
+        
+    return result
+
+
 @router.post("/calculate-rebalance")
 def calculate_rebalance_endpoint(
     payload: CalculateRebalanceRequest,

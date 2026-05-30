@@ -221,6 +221,11 @@ export default function DashboardPage() {
   };
 
   const handlePortfolioChange = async (id: string) => {
+    if (id === "NEW") {
+      router.push("/portfolios/new");
+      return;
+    }
+
     setSelectedPortfolioId(id);
     localStorage.setItem("selected_portfolio_id", id);
     setLoading(true);
@@ -240,6 +245,24 @@ export default function DashboardPage() {
       await refreshPortfolioStatus(id, userId);
     }
     setLoading(false);
+  };
+
+  const handleDeletePortfolio = async () => {
+    if (!selectedPortfolioId) return;
+    if (!confirm("⚠️ ADVERTENCIA: ¿Estás completamente seguro de borrar este portafolio? Se eliminarán todas las compras, saldos e historial de manera permanente.")) return;
+    
+    try {
+      const result = await backendApi.deletePortfolio(selectedPortfolioId, userId);
+      if (result.success) {
+        alert("Portafolio eliminado correctamente.");
+        localStorage.removeItem("selected_portfolio_id");
+        window.location.reload(); // Recarga la app para re-inicializar el estado
+      } else {
+        alert(result.message || "Error al eliminar el portafolio.");
+      }
+    } catch (err) {
+      alert("Error de conexión al eliminar.");
+    }
   };
 
   const handleCalculateRebalance = async () => {
@@ -466,8 +489,18 @@ export default function DashboardPage() {
                   {p.nombre_portafolio}
                 </option>
               ))}
+              <option value="NEW" className="bg-slate-900 text-amber-500 [data-theme='light']:bg-white font-bold">
+                ➕ Crear Nuevo Portafolio
+              </option>
             </select>
           </div>
+          
+          <button 
+            onClick={handleDeletePortfolio}
+            className="w-full text-left text-[10px] text-red-500/70 hover:text-red-500 font-bold uppercase tracking-wider pl-2 flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Borrar este portafolio
+          </button>
         </div>
 
         {/* Navegación Interna */}
