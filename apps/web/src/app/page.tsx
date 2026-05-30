@@ -36,7 +36,8 @@ import {
   HelpCircle,
   Percent,
   Layers,
-  Award
+  Award,
+  Trash2
 } from "lucide-react";
 import { 
   PieChart,
@@ -336,6 +337,20 @@ export default function DashboardPage() {
     }
   };
 
+  const handleDeleteOperation = async (opId: string) => {
+    if (!confirm("¿Estás seguro de eliminar esta compra de prueba? Se revertirá el saldo de efectivo.")) return;
+    try {
+      const result = await backendApi.deleteOperation(opId, userId);
+      if (result.success) {
+        await refreshPortfolioStatus(selectedPortfolioId, userId);
+      } else {
+        alert(result?.message || "No se pudo eliminar la operación.");
+      }
+    } catch (err: any) {
+      alert("Error de conexión al eliminar.");
+    }
+  };
+
   const handleTickerBlur = async () => {
     if (!ticker.trim()) return;
     try {
@@ -619,15 +634,15 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Caja 4: Ganancia Porcentual */}
+          {/* Caja 4: Monto Invertido */}
           <div className="gostock-box p-5 flex items-center gap-4 relative overflow-hidden">
-            <div className={`p-3.5 rounded-2xl border ${status?.total_pnl >= 0 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-red-500/10 border-red-500/20 text-red-400"}`}>
-              <Percent className="h-5 w-5" />
+            <div className={`p-3.5 rounded-2xl border bg-blue-500/10 border-blue-500/20 text-blue-400`}>
+              <DollarSign className="h-5 w-5" />
             </div>
             <div>
-              <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Desempeño Total</span>
-              <h3 className={`text-xl font-black font-mono mt-1 ${status?.total_pnl >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                {status?.total_pnl >= 0 ? "+" : ""}{status?.total_pnl_percent?.toFixed(2)}%
+              <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Monto Invertido</span>
+              <h3 className={`text-xl font-black font-mono mt-1 text-white [data-theme='light']:text-gray-900`}>
+                ${((status?.assets_value || 0) - (status?.total_pnl || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </h3>
             </div>
           </div>
@@ -864,6 +879,7 @@ export default function DashboardPage() {
                     <th className="p-3 text-right cursor-pointer hover:bg-gray-800/20" onClick={() => handleSort('peso_portafolio')}>
                       Peso (%) <ArrowUpDown className="h-3 w-3 inline ml-1" />
                     </th>
+                    <th className="p-3 text-center">Acción</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-800/40 text-xs">
@@ -906,6 +922,15 @@ export default function DashboardPage() {
                             {isPos ? "+" : ""}{lot.pnl_percent.toFixed(2)}%
                           </td>
                           <td className="p-3 text-right font-mono font-bold text-gray-500">{lot.peso_portafolio.toFixed(2)}%</td>
+                          <td className="p-3 text-center">
+                            <button 
+                              onClick={() => handleDeleteOperation(lot.id)}
+                              className="text-red-500 hover:text-red-400 cursor-pointer p-1 rounded-md hover:bg-red-500/10 transition"
+                              title="Borrar lote de prueba"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
                         </tr>
                       );
                     })
