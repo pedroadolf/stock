@@ -122,8 +122,7 @@ export default function DashboardPage() {
   const [ticker, setTicker] = useState("");
   const [cantidad, setCantidad] = useState("1");
   const [seccion, setSeccion] = useState("");
-  const [esManual, setEsManual] = useState(false);
-  const [valorManual, setValorManual] = useState("");
+  const [instrumentType, setInstrumentType] = useState("");
   const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState<string | null>(null);
 
@@ -313,7 +312,6 @@ export default function DashboardPage() {
     setBuying(true);
     try {
       const cantFloat = parseFloat(cantidad) || 0;
-      const valManualFloat = esManual ? (parseFloat(valorManual) || 0) : undefined;
       
       const result = await backendApi.simulateBuy(
         selectedPortfolioId,
@@ -321,21 +319,37 @@ export default function DashboardPage() {
         ticker.toUpperCase(),
         cantFloat,
         seccion,
-        valManualFloat
+        undefined
       );
 
       if (result.success) {
         setShowBuyModal(false);
         setTicker("");
         setCantidad("1");
-        setEsManual(false);
-        setValorManual("");
+        setInstrumentType("");
         await refreshPortfolioStatus(selectedPortfolioId, userId);
       }
     } catch (err: any) {
       setBuyError(err.message || "Error al registrar la compra. Verifica tus fondos.");
     } finally {
       setBuying(false);
+    }
+  };
+
+  const handleTickerBlur = async () => {
+    if (!ticker.trim()) return;
+    try {
+      const res = await backendApi.getTickerCategory(ticker.trim());
+      if (res) {
+        if (res.category && res.category !== "General") {
+          setSeccion(res.category);
+        }
+        if (res.instrumentType) {
+          setInstrumentType(res.instrumentType);
+        }
+      }
+    } catch (err) {
+      console.error("Error al obtener categoría", err);
     }
   };
 
@@ -1266,7 +1280,8 @@ export default function DashboardPage() {
                 <input 
                   type="text"
                   value={ticker}
-                  onChange={(e) => setTicker(e.target.value)}
+                  onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                  onBlur={handleTickerBlur}
                   placeholder="Ej: VOO, NAFTRAC, VTI, CETES..."
                   className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs font-mono text-white placeholder-gray-700 focus:outline-none focus:border-amber-500 transition"
                   required
@@ -1289,51 +1304,50 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Sección Destino</label>
-                  <select 
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Categoría (Sección)</label>
+                  <input 
+                    type="text"
+                    list="secciones-list"
                     value={seccion}
                     onChange={(e) => setSeccion(e.target.value)}
-                    className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-amber-500 transition cursor-pointer"
-                    required
-                  >
-                    <option value="" disabled>Seleccionar...</option>
-                    {status?.secciones?.map((sec: any) => (
-                      <option key={sec.nombre_seccion} value={sec.nombre_seccion}>
-                        {sec.nombre_seccion}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 p-2.5 bg-gray-900/40 rounded-xl border border-gray-800/40">
-                <input 
-                  id="esManual"
-                  type="checkbox"
-                  checked={esManual}
-                  onChange={(e) => setEsManual(e.target.checked)}
-                  className="rounded border-gray-800 text-amber-500 focus:ring-amber-500/20"
-                />
-                <label htmlFor="esManual" className="text-xs text-gray-400 font-semibold cursor-pointer">
-                  Activo Manual (CETEs, Bancos, SOFIPOs)
-                </label>
-              </div>
-
-              {esManual && (
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Valor Actual de Posición (USD)</label>
-                  <input 
-                    type="number"
-                    value={valorManual}
-                    onChange={(e) => setValorManual(e.target.value)}
-                    placeholder="Escribe el valor actual..."
-                    className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
-                    min="0"
-                    step="any"
+                    placeholder="Ej: ETFs, Tecnología..."
+                    className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 transition h-[38px]"
                     required
                   />
+                  <datalist id="secciones-list">
+                    {(status?.secciones?.length > 0 
+                      ? status.secciones 
+                      : [
+                          { nombre_seccion: "General" },
+                          { nombre_seccion: "Tecnología" },
+                          { nombre_seccion: "Bienes Raíces" },
+                          { nombre_seccion: "Salud" },
+                          { nombre_seccion: "Renta Fija" },
+                          { nombre_seccion: "Efectivo" }
+                        ]
+                    ).map((sec: any) => (
+                      <option key={sec.nombre_seccion} value={sec.nombre_seccion} />
+                    ))}
+                  </datalist>
                 </div>
-              )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Tipo de Instrumento</label>
+                <select 
+                  value={instrumentType}
+                  onChange={(e) => setInstrumentType(e.target.value)}
+                  className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 transition cursor-pointer"
+                  required
+                >
+                  <option value="" disabled>Seleccionar...</option>
+                  <option value="Stocks">Stocks</option>
+                  <option value="Crypto">Crypto</option>
+                  <option value="Treasury bonds">Treasury bonds</option>
+                  <option value="Sectors">Sectors</option>
+                  <option value="ETFs">ETFs</option>
+                </select>
+              </div>
 
               {buyError && (
                 <div className="p-3 bg-red-950/20 border border-red-800/30 text-red-200 rounded-xl text-xs flex gap-2">

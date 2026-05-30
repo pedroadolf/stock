@@ -41,6 +41,36 @@ def get_live_price(ticker: str, use_mock: bool = False) -> Decimal:
     return MOCK_PRICES.get(ticker.upper(), Decimal("150.00"))
 
 
+def get_ticker_category(ticker: str) -> dict:
+    """
+    Obtiene la categoría y el tipo de instrumento sugerido para un ticker usando Yahoo Finance.
+    """
+    try:
+        info = yf.Ticker(ticker).info
+        quote_type = info.get('quoteType', '')
+        
+        # Tipo de instrumento
+        if quote_type == 'CRYPTOCURRENCY':
+            instrument_type = 'Crypto'
+        elif quote_type == 'ETF':
+            instrument_type = 'ETFs'
+        else:
+            instrument_type = 'Stocks'
+            
+        # Categoría
+        if quote_type == 'CRYPTOCURRENCY':
+            category = 'Crypto'
+        elif quote_type == 'ETF':
+            category = info.get('category', 'ETFs')
+        else:
+            sector = info.get('sector', '')
+            category = sector if sector else 'General'
+            
+        return {"category": category, "instrumentType": instrument_type}
+    except:
+        return {"category": "General", "instrumentType": "Stocks"}
+
+
 class MCPRequestHandler:
     """
     Orquestador de negocio para la gestión de Portafolios, Operaciones y Rebalanceo inteligente.
@@ -145,7 +175,8 @@ class MCPRequestHandler:
             # 2. Calcular saldo actual de efectivo
             status_data = self.get_portfolio_status(portfolio_id, user_id)
             if not status_data.get("success"):
-                return {"success": False, "error": "No se pudo obtener el saldo del portafolio", "status_code": 500}
+                error_msg = status_data.get("error", "Error desconocido")
+                return {"success": False, "error": f"No se pudo obtener el saldo del portafolio: {error_msg}", "status_code": 500}
                 
             cash_balance = Decimal(str(status_data["cash_balance"]))
             
@@ -407,10 +438,10 @@ class MCPRequestHandler:
             # Añadir "Efectivo Libre" como información complementaria
             pct_cash = (cash_balance / total_portfolio_value * 100) if total_portfolio_value > 0 else 0
             
-            # Calcular P&L consolidado del portafolio
-            total_cost = sum(h["costo_total"] for h in active_holdings)
-            total_pnl = float(assets_total_value - total_cost)
-            total_pnl_percent = (total_pnl / float(total_cost) * 100) if total_cost > 0 else 0
+            # PnL Total Global (Monto y %)
+            total_cost = sum([h['costo_total'] for h in active_holdings])
+            total_pnl = float(assets_total_value) - total_cost
+            total_pnl_percent = (total_pnl / total_cost * 100) if total_cost > 0 else 0
             
             return {
                 "success": True,

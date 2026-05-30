@@ -213,5 +213,14 @@ export const backendApi = {
       method: 'GET',
     });
   },
+
+  /**
+   * Obtiene la categoría sugerida de un activo
+   */
+  async getTickerCategory(ticker: string): Promise<{ ticker: string; category: string; instrumentType: string }> {
+    return fetchFromBackend(`/api/trades/ticker-category?ticker=${encodeURIComponent(ticker)}`, {
+      method: 'GET',
+    });
+  },
 };
 

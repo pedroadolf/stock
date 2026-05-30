@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List
 import os
 from supabase import create_client
 
-from src.mcp_handlers import MCPRequestHandler, get_live_price
+from src.mcp_handlers import MCPRequestHandler, get_live_price, get_ticker_category
 
 router = APIRouter()
 
@@ -178,4 +178,15 @@ def get_instrument_details_endpoint(
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error"))
     return result
+
+
+@router.get("/ticker-category")
+def get_ticker_category_endpoint(
+    ticker: str = Query(..., description="Ticker del activo a consultar")
+):
+    """
+    Obtiene la categoría sugerida de un activo.
+    """
+    result = get_ticker_category(ticker)
+    return {"ticker": ticker, "category": result["category"], "instrumentType": result["instrumentType"]}
 
