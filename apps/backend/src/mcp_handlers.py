@@ -424,7 +424,7 @@ class MCPRequestHandler:
             secciones_analisis = []
             for sec_name, target_pct in target_map.items():
                 val_real = section_values.get(sec_name, Decimal("0.00"))
-                pct_real = (val_real / total_portfolio_value * 100) if total_portfolio_value > 0 else 0
+                pct_real = float((val_real / total_portfolio_value * 100) if total_portfolio_value > 0 else 0)
                 desviacion = pct_real - target_pct
                 
                 secciones_analisis.append({
