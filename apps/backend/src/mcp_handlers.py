@@ -259,6 +259,29 @@ class MCPRequestHandler:
         except Exception as e:
             return {"success": False, "error": str(e), "status_code": 500}
 
+    def delete_operation(self, op_id: str, user_id: str) -> Dict[str, Any]:
+        """
+        Elimina una operación específica y por cascada sus transacciones (reembolsando efectivo).
+        Verifica que el portafolio pertenezca al usuario.
+        """
+        try:
+            # Check ownership and get operation info
+            op_check = self.supabase.table('operaciones').select('id, portafolio_id').eq('id', op_id).execute()
+            if not op_check.data:
+                return {"success": False, "error": "Operación no encontrada", "status_code": 404}
+                
+            port_id = op_check.data[0]['portafolio_id']
+            port_check = self.supabase.table('portafolios').select('user_id').eq('id', port_id).execute()
+            if not port_check.data or port_check.data[0]['user_id'] != user_id:
+                return {"success": False, "error": "No autorizado", "status_code": 403}
+                
+            # Perform delete (cascade handles transacciones automatically)
+            self.supabase.table('operaciones').delete().eq('id', op_id).execute()
+            
+            return {"success": True, "message": "Operación eliminada y efectivo reembolsado correctamente."}
+        except Exception as e:
+            return {"success": False, "error": str(e), "status_code": 500}
+
     def get_portfolio_status(self, portfolio_id: str, user_id: str) -> Dict[str, Any]:
         """
         Calcula el estado del portafolio: balance de efectivo, holdings activos,

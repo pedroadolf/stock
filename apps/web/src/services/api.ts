@@ -158,6 +158,16 @@ export const backendApi = {
   },
 
   /**
+   * Elimina una operación (lote) del portafolio
+   */
+  async deleteOperation(opId: string, userId: string): Promise<{ success: boolean; message?: string }> {
+    return fetchFromBackend(`/api/trades/operation/${encodeURIComponent(opId)}`, {
+      method: 'DELETE',
+      headers: { 'User-ID': userId },
+    });
+  },
+
+  /**
    * Calcula la distribución de rebalanceo sugerida
    */
   async calculateRebalance(
