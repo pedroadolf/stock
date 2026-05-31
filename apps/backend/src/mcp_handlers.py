@@ -182,9 +182,9 @@ class MCPRequestHandler:
             op_data = {
                 "portafolio_id": portfolio_id,
                 "user_id": user_id,
-                "tipo": "deposito",
+                "tipo": "dividendo",
                 "status": "completed",
-                "ticker": "USD",
+                "ticker": "CASH",
                 "cantidad": 1.0,
                 "precio_ejecucion": float(amount),
                 "comision": 0.0,
