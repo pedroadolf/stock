@@ -174,6 +174,42 @@ class MCPRequestHandler:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def add_funds(self, portfolio_id: str, user_id: str, amount: float) -> Dict[str, Any]:
+        """
+        Deposita fondos al portafolio.
+        """
+        try:
+            op_data = {
+                "portafolio_id": portfolio_id,
+                "user_id": user_id,
+                "tipo": "deposito",
+                "status": "completed",
+                "ticker": "USD",
+                "cantidad": 1.0,
+                "precio_ejecucion": float(amount),
+                "comision": 0.0,
+                "seccion": "Efectivo",
+                "folio": f"DEP-{portfolio_id[:8].upper()}-{int(amount)}"
+            }
+            op_res = self.supabase.table('operaciones').insert(op_data).execute()
+            if op_res.data:
+                op_id = op_res.data[0]['id']
+                trans_data = {
+                    "operacion_id": op_id,
+                    "tipo_movimiento": "abono",
+                    "monto_total": float(amount),
+                    "moneda": "USD",
+                    "metadata": {"nota": "Depósito de fondeo"}
+                }
+                self.supabase.table('transacciones').insert(trans_data).execute()
+                
+            return {
+                "success": True,
+                "message": f"Se han depositado ${amount:.2f} USD al portafolio."
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def execute_simulate_buy(self, portfolio_id: str, user_id: str, ticker: str, cantidad: float, seccion: str, valor_actual_manual: Optional[float] = None) -> Dict[str, Any]:
         """
         Ejecuta la compra simulada de un activo validando fondos disponibles del portafolio.

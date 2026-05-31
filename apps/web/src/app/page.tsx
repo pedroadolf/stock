@@ -304,6 +304,13 @@ export default function DashboardPage() {
     if (!selectedPortfolioId || !userId || rebalanceResults.length === 0) return;
     setApplyingRebalance(true);
     try {
+      // 1. Depositar los fondos primero
+      const amountToDeposit = parseFloat(rebalanceAmount);
+      if (amountToDeposit > 0) {
+        await backendApi.depositFunds(selectedPortfolioId, userId, amountToDeposit);
+      }
+
+      // 2. Ejecutar las compras
       let appliedCount = 0;
       for (const rec of rebalanceResults) {
         if (rec.monto_sugerido > 0.01) {
@@ -319,7 +326,7 @@ export default function DashboardPage() {
           appliedCount++;
         }
       }
-      alert(`¡Se aplicó el rebalanceo! Se registraron ${appliedCount} inversiones simuladas distribuidas.`);
+      alert(`¡Se aplicó el rebalanceo! Se depositaron $${amountToDeposit.toLocaleString()} USD y se registraron ${appliedCount} inversiones simuladas distribuidas.`);
       await refreshPortfolioStatus(selectedPortfolioId, userId);
     } catch (err: any) {
       alert(`Error al aplicar rebalanceo: ${err.message}`);

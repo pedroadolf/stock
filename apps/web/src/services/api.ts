@@ -178,6 +178,24 @@ export const backendApi = {
   },
 
   /**
+   * Deposita fondos al portafolio
+   */
+  async depositFunds(
+    portfolioId: string,
+    userId: string,
+    amount: number
+  ): Promise<{ success: boolean; message: string }> {
+    return fetchFromBackend('/api/trades/deposit', {
+      method: 'POST',
+      headers: { 'User-ID': userId },
+      body: JSON.stringify({
+        portfolio_id: portfolioId,
+        amount,
+      }),
+    });
+  },
+
+  /**
    * Calcula la distribución de rebalanceo sugerida
    */
   async calculateRebalance(

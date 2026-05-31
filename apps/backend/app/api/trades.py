@@ -21,6 +21,10 @@ class CalculateRebalanceRequest(BaseModel):
     portfolio_id: str
     amount: float
 
+class DepositFundsRequest(BaseModel):
+    portfolio_id: str
+    amount: float
+
 class SectionDefinition(BaseModel):
     nombre_seccion: str
     porcentaje_objetivo: float
@@ -178,6 +182,31 @@ def delete_portfolio_endpoint(
     
     if not result.get("success"):
         raise HTTPException(status_code=result.get("status_code", 400), detail=result.get("error"))
+        
+    return result
+
+
+@router.post("/deposit")
+def deposit_funds_endpoint(
+    payload: DepositFundsRequest,
+    user_id: Optional[str] = Header(None, alias="User-ID", description="El ID del usuario propietario"),
+    supabase_client = Depends(get_supabase_client)
+):
+    """
+    Deposita fondos al portafolio (para rebalanceo o aportaciones adicionales).
+    """
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Header 'User-ID' es requerido para aislamiento de inquilinos")
+        
+    handler = MCPRequestHandler(supabase_client)
+    result = handler.add_funds(
+        portfolio_id=payload.portfolio_id,
+        user_id=user_id,
+        amount=payload.amount
+    )
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error"))
         
     return result
 
