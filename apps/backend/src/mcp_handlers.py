@@ -79,9 +79,11 @@ def get_ticker_category(ticker: str) -> dict:
             sector = info.get('sector', '')
             category = sector if sector else 'General'
             
-        return {"category": category, "instrumentType": instrument_type}
+        fund_family = info.get('fundFamily', 'N/A')
+            
+        return {"category": category, "instrumentType": instrument_type, "fundFamily": fund_family}
     except:
-        return {"category": "General", "instrumentType": "Stocks"}
+        return {"category": "General", "instrumentType": "Stocks", "fundFamily": "N/A"}
 
 
 class MCPRequestHandler:

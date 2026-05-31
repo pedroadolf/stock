@@ -125,6 +125,7 @@ export default function DashboardPage() {
   const [cantidad, setCantidad] = useState("1");
   const [seccion, setSeccion] = useState("");
   const [yahooCategory, setYahooCategory] = useState("");
+  const [yahooFundFamily, setYahooFundFamily] = useState("");
   const [instrumentType, setInstrumentType] = useState("");
   const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState<string | null>(null);
@@ -386,6 +387,9 @@ export default function DashboardPage() {
       if (res) {
         if (res.category && res.category !== "General") {
           setYahooCategory(res.category);
+        }
+        if (res.fundFamily) {
+          setYahooFundFamily(res.fundFamily);
         }
         if (res.instrumentType) {
           setInstrumentType(res.instrumentType);
@@ -694,7 +698,7 @@ export default function DashboardPage() {
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               
-              {/* Columna Izquierda: Tabla de Asignación por Sección */}
+              {/* Columna Izquierda: Tabla de Asignación por Clase de Activo */}
               <div className="lg:col-span-2 gostock-box p-6 space-y-6">
                 <div>
                   <h3 className="text-base font-extrabold text-white [data-theme='light']:text-gray-900">Distribución del Plan (Asset Allocation)</h3>
@@ -705,7 +709,7 @@ export default function DashboardPage() {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-gray-800 text-[10px] text-gray-500 font-bold uppercase tracking-wider">
-                        <th className="pb-3">Nombre de la Sección</th>
+                        <th className="pb-3">Clase de Activo</th>
                         <th className="pb-3 text-center">Objetivo (%)</th>
                         <th className="pb-3 text-center">Actual (%)</th>
                         <th className="pb-3 text-right">Inversión Actual</th>
@@ -775,7 +779,7 @@ export default function DashboardPage() {
                             {isExpanded && seccionHoldings.length === 0 && (
                               <tr className="bg-gray-900/30">
                                 <td colSpan={5} className="py-3 px-12 text-xs text-gray-500 italic">
-                                  Sin instrumentos en esta sección
+                                  Sin instrumentos en esta clase
                                 </td>
                               </tr>
                             )}
@@ -909,13 +913,13 @@ export default function DashboardPage() {
                   />
                 </div>
 
-                {/* Filtro por Sección */}
+                {/* Filtro por Clase de Activo */}
                 <select
                   value={posFilterSection}
                   onChange={(e) => setPosFilterSection(e.target.value)}
                   className="bg-[#111827] [data-theme='light']:bg-white border border-gray-800 [data-theme='light']:border-gray-300 rounded-xl px-3 py-2 text-xs text-white [data-theme='light']:text-gray-900 font-bold focus:outline-none cursor-pointer"
                 >
-                  <option value="">Todas las Secciones</option>
+                  <option value="">Todas las Clases</option>
                   {status?.secciones?.map((sec: any) => (
                     <option key={sec.nombre_seccion} value={sec.nombre_seccion}>
                       {sec.nombre_seccion}
@@ -952,7 +956,7 @@ export default function DashboardPage() {
                     </th>
                     <th className="p-3">Nombre del Instrumento</th>
                     <th className="p-3 text-center">Origen</th>
-                    <th className="p-3">Sección</th>
+                    <th className="p-3">Clase de Activo</th>
                     <th className="p-3 text-right">Títulos</th>
                     <th className="p-3 text-right cursor-pointer hover:bg-gray-800/20" onClick={() => handleSort('precio_compra')}>
                       Compra <ArrowUpDown className="h-3 w-3 inline ml-1" />
@@ -1421,10 +1425,10 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Categoría de Yahoo</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Categoría de Mercado (Yahoo)</label>
                   <input 
                     type="text"
-                    value={yahooCategory || "Buscando..."}
+                    value={yahooCategory ? `${yahooCategory}${yahooFundFamily !== "N/A" && yahooFundFamily ? ` | ${yahooFundFamily}` : ""}` : "Buscando..."}
                     className="w-full bg-gray-900/50 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-gray-500 cursor-not-allowed"
                     readOnly
                     disabled
@@ -1432,7 +1436,7 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="space-y-1 col-span-2">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Sección del Portafolio</label>
+                  <label className="text-xs font-bold text-amber-500 uppercase tracking-wide">Clase de Activo (Tu Estrategia)</label>
                   <select 
                     value={seccion}
                     onChange={(e) => setSeccion(e.target.value)}
