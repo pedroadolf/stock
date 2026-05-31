@@ -537,24 +537,6 @@ export default function DashboardPage() {
             <BookOpen className="h-4.5 w-4.5" />
             Ficha de Instrumentos
           </button>
-          
-          <div className="pt-6 pb-2 border-t border-gray-800/60 [data-theme='light']:border-gray-200/60">
-            <span className="text-[10px] text-gray-500 uppercase tracking-widest font-black block px-4">
-              Mi Distribución Real
-            </span>
-          </div>
-          
-          <div className="space-y-1 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
-            {status?.secciones?.map((sec: any, idx: number) => (
-              <div key={sec.nombre_seccion} className="flex justify-between items-center px-4 py-2 rounded-xl hover:bg-gray-800/30">
-                <div className="flex items-center gap-2 truncate">
-                  <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
-                  <span className="text-[11px] text-gray-400 font-semibold truncate">{sec.nombre_seccion}</span>
-                </div>
-                <span className="font-mono text-[11px] text-gray-300 font-bold">{sec.porcentaje_real.toFixed(1)}%</span>
-              </div>
-            ))}
-          </div>
         </nav>
 
         {/* Acciones Rápidas */}
