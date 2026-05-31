@@ -127,6 +127,9 @@ export default function DashboardPage() {
   const [yahooCategory, setYahooCategory] = useState("");
   const [yahooFundFamily, setYahooFundFamily] = useState("");
   const [instrumentType, setInstrumentType] = useState("");
+  const [livePrice, setLivePrice] = useState<number | null>(null);
+  const [montoUSD, setMontoUSD] = useState("");
+  const [porcentajeInversion, setPorcentajeInversion] = useState("");
   const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState<string | null>(null);
 
@@ -383,21 +386,83 @@ export default function DashboardPage() {
   const handleTickerBlur = async () => {
     if (!ticker.trim()) return;
     try {
+      // 1. Obtener Categoría
       const res = await backendApi.getTickerCategory(ticker.trim());
       if (res) {
-        if (res.category && res.category !== "General") {
-          setYahooCategory(res.category);
+        if (res.category && res.category !== "General") setYahooCategory(res.category);
+        if (res.fundFamily) setYahooFundFamily(res.fundFamily);
+        if (res.instrumentType) setInstrumentType(res.instrumentType);
+      }
+      
+      // 2. Obtener Precio en Vivo
+      const resPrice = await backendApi.getInstrumentDetails(ticker.trim());
+      if (resPrice && resPrice.success && resPrice.data?.precio_actual_vivo) {
+        const price = resPrice.data.precio_actual_vivo;
+        setLivePrice(price);
+        
+        // Recalcular montos si ya hay cantidad
+        if (cantidad && !isNaN(parseFloat(cantidad))) {
+          const val = parseFloat(cantidad);
+          const m = val * price;
+          setMontoUSD(m.toFixed(2));
+          if (status?.total_value && status.total_value > 0) {
+            setPorcentajeInversion(((m / status.total_value) * 100).toFixed(2));
+          }
         }
-        if (res.fundFamily) {
-          setYahooFundFamily(res.fundFamily);
-        }
-        if (res.instrumentType) {
-          setInstrumentType(res.instrumentType);
-        }
+      } else {
+        setLivePrice(null);
       }
     } catch (err) {
-      console.error("Error al obtener categoría", err);
+      console.error("Error al obtener detalles del ticker", err);
     }
+  };
+
+  const handleCantidadChange = (val: string) => {
+    setCantidad(val);
+    if (!val || isNaN(parseFloat(val)) || !livePrice) {
+      setMontoUSD("");
+      setPorcentajeInversion("");
+      return;
+    }
+    const cant = parseFloat(val);
+    const m = cant * livePrice;
+    setMontoUSD(m.toFixed(2));
+    if (status?.total_value && status.total_value > 0) {
+      setPorcentajeInversion(((m / status.total_value) * 100).toFixed(2));
+    } else {
+      setPorcentajeInversion("");
+    }
+  };
+
+  const handleMontoChange = (val: string) => {
+    setMontoUSD(val);
+    if (!val || isNaN(parseFloat(val)) || !livePrice) {
+      setCantidad("");
+      setPorcentajeInversion("");
+      return;
+    }
+    const m = parseFloat(val);
+    const cant = m / livePrice;
+    setCantidad(cant.toString()); // Permitimos decimales
+    if (status?.total_value && status.total_value > 0) {
+      setPorcentajeInversion(((m / status.total_value) * 100).toFixed(2));
+    } else {
+      setPorcentajeInversion("");
+    }
+  };
+
+  const handlePorcentajeChange = (val: string) => {
+    setPorcentajeInversion(val);
+    if (!val || isNaN(parseFloat(val)) || !livePrice || !status?.total_value || status.total_value <= 0) {
+      setCantidad("");
+      setMontoUSD("");
+      return;
+    }
+    const p = parseFloat(val);
+    const m = (p / 100) * status.total_value;
+    setMontoUSD(m.toFixed(2));
+    const cant = m / livePrice;
+    setCantidad(cant.toString());
   };
 
   // Ejecutar búsqueda de instrumento en pestaña 3
@@ -1391,21 +1456,62 @@ export default function DashboardPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Cantidad</label>
-                  <input 
-                    type="number"
-                    value={cantidad}
-                    onChange={(e) => setCantidad(e.target.value)}
-                    placeholder="1"
-                    className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
-                    min="0.0001"
-                    step="any"
-                    required
-                  />
+              <div className="bg-gray-900/40 border border-gray-800 rounded-xl p-4 space-y-4">
+                <div className="flex justify-between items-center pb-2 border-b border-gray-800">
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">Calculadora de Inversión</span>
+                  <span className="text-xs text-gray-500">
+                    Capital Total: <strong className="text-white">${status?.total_value?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'} USD</strong>
+                  </span>
                 </div>
+                
+                {livePrice && (
+                  <div className="text-[10px] text-emerald-500 font-mono text-right">
+                    Precio Actual (Yahoo): ${livePrice.toFixed(2)} USD
+                  </div>
+                )}
+                
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Monto (USD)</label>
+                    <input 
+                      type="number"
+                      value={montoUSD}
+                      onChange={(e) => handleMontoChange(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
+                      min="0"
+                      step="any"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Porcentaje (%)</label>
+                    <input 
+                      type="number"
+                      value={porcentajeInversion}
+                      onChange={(e) => handlePorcentajeChange(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
+                      min="0"
+                      step="any"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-amber-500 uppercase tracking-wide">Títulos (Cant.)</label>
+                    <input 
+                      type="number"
+                      value={cantidad}
+                      onChange={(e) => handleCantidadChange(e.target.value)}
+                      placeholder="1"
+                      className="w-full bg-gray-950 border border-amber-500/50 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
+                      min="0.0001"
+                      step="any"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
 
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Categoría de Mercado (Yahoo)</label>
                   <input 
