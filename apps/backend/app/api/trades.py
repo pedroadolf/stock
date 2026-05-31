@@ -232,3 +232,17 @@ def get_ticker_category_endpoint(
     result = get_ticker_category(ticker)
     return {"ticker": ticker, "category": result["category"], "instrumentType": result["instrumentType"]}
 
+
+@router.get("/ticker-details")
+def get_ticker_details_endpoint(
+    ticker: str = Query(..., description="Ticker del activo a consultar"),
+    supabase_client = Depends(get_supabase_client)
+):
+    """
+    Obtiene los detalles enriquecidos del ticker desde Yahoo Finance.
+    """
+    handler = MCPRequestHandler(supabase_client)
+    result = handler.get_ticker_details(ticker)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error"))
+    return result

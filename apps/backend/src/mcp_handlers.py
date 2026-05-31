@@ -517,14 +517,38 @@ class MCPRequestHandler:
                 data['precio_actual_vivo'] = float(live_price)
                 return {"success": True, "data": data}
             
-            # Fallback si no está en el catálogo pre-poblado
+            # Fallback si no está en el catálogo pre-poblado, buscar en Yahoo
+            details = self.get_ticker_details(ticker_upper)
             live_price = get_live_price(ticker_upper)
+            
+            if details.get("success"):
+                return {
+                    "success": True,
+                    "data": {
+                        "ticker": ticker_upper,
+                        "nombre": details.get("name", f"{ticker_upper} Fund/Stock"),
+                        "descripcion": details.get("summary", "Ficha técnica generada automáticamente."),
+                        "tamano_aum": details.get("size", "N/A"),
+                        "precio_referencia": f"{details.get('price', live_price)} USD",
+                        "precio_actual_vivo": float(live_price) if live_price != "0.00" else float(details.get("price", 0)),
+                        "comision": details.get("fee", "N/A"),
+                        "posiciones": details.get("count", 0),
+                        "top_10_percentage": details.get("top10", "N/A"),
+                        "dividendo": details.get("div", "N/A"),
+                        "retorno_10y": details.get("r10", "N/A"),
+                        "retorno_5y": details.get("r5", "N/A"),
+                        "retorno_1y": details.get("r1", "N/A"),
+                        "tier": details.get("tier", "Neutral"),
+                        "top_holdings": []
+                    }
+                }
+            
             return {
                 "success": True,
                 "data": {
                     "ticker": ticker_upper,
                     "nombre": f"{ticker_upper} Fund/Stock",
-                    "descripcion": f"Ficha técnica generada automáticamente para {ticker_upper}. Información detallada no disponible en base de datos de catálogo local.",
+                    "descripcion": f"Información no disponible.",
                     "tamano_aum": "N/A",
                     "precio_referencia": f"{live_price} USD",
                     "precio_actual_vivo": float(live_price),
@@ -716,6 +740,63 @@ class MCPRequestHandler:
                 active_secs = new_active
                 
         return allocation
+
+    def get_ticker_details(self, ticker: str) -> Dict[str, Any]:
+        """
+        Consulta información detallada de un ticker a través de Yahoo Finance.
+        """
+        try:
+            stock = yf.Ticker(ticker)
+            info = stock.info
+            
+            # Mapeo de datos básicos
+            precio_actual = info.get('regularMarketPrice') or info.get('currentPrice') or info.get('previousClose')
+            
+            # Tamaño AUM (para ETFs) o Market Cap (para acciones)
+            aum_raw = info.get('totalAssets') or info.get('marketCap')
+            size = "N/A"
+            if aum_raw:
+                if aum_raw >= 1e9:
+                    size = f"${aum_raw / 1e9:.2f} B"
+                elif aum_raw >= 1e6:
+                    size = f"${aum_raw / 1e6:.2f} M"
+                else:
+                    size = f"${aum_raw:,.2f}"
+            
+            # Comisión (Expense Ratio) para ETFs
+            fee_raw = info.get('trailingAnnualDividendYield') # Fallback if expenseRatio not found? No, use correct field.
+            fee = "N/A"
+            if info.get('navPrice') and info.get('ytdReturn'): # Is an ETF
+                fee = f"{(info.get('expenseRatio', 0) * 100):.2f}%" if info.get('expenseRatio') is not None else "N/A"
+                
+            # Yield
+            div_raw = info.get('trailingAnnualDividendYield') or info.get('dividendYield')
+            div = f"{(div_raw * 100):.2f}%" if div_raw else "N/A"
+            
+            # Rendimientos
+            r1 = f"{(info.get('ytdReturn', 0) * 100):.2f}%" if info.get('ytdReturn') is not None else "N/A"
+            r5 = f"{(info.get('fiveYearAverageReturn', 0) * 100):.2f}%" if info.get('fiveYearAverageReturn') is not None else "N/A"
+            r10 = "N/A" # Yahoo Finance info dict doesn't typically have 10 year return reliably.
+            
+            return {
+                "success": True,
+                "ticker": ticker.upper(),
+                "price": precio_actual,
+                "size": size,
+                "fee": fee,
+                "div": div,
+                "r1": r1,
+                "r5": r5,
+                "r10": r10,
+                "count": info.get('holdingsCount', 0),
+                "top10": "N/A", # Need holdings endpoint for this
+                "tier": "Neutral",
+                "name": info.get('longName') or info.get('shortName') or ticker.upper(),
+                "category": info.get('category', "N/A"),
+                "summary": info.get('longBusinessSummary', "Información no disponible.")
+            }
+        except Exception as e:
+            return {"success": False, "error": f"Error obteniendo detalles del ticker: {str(e)}"}
 
 
 def process_mcp_request(request_data: dict, context: dict) -> dict:

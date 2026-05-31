@@ -123,6 +123,7 @@ export default function DashboardPage() {
   const [ticker, setTicker] = useState("");
   const [cantidad, setCantidad] = useState("1");
   const [seccion, setSeccion] = useState("");
+  const [yahooCategory, setYahooCategory] = useState("");
   const [instrumentType, setInstrumentType] = useState("");
   const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState<string | null>(null);
@@ -380,7 +381,7 @@ export default function DashboardPage() {
       const res = await backendApi.getTickerCategory(ticker.trim());
       if (res) {
         if (res.category && res.category !== "General") {
-          setSeccion(res.category);
+          setYahooCategory(res.category);
         }
         if (res.instrumentType) {
           setInstrumentType(res.instrumentType);
@@ -636,7 +637,7 @@ export default function DashboardPage() {
             <div>
               <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Valor Total Portafolio</span>
               <h3 className="text-xl font-black font-mono mt-1 text-white [data-theme='light']:text-gray-900">
-                ${status?.total_value?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
+                ${status?.total_value?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"} USD
               </h3>
             </div>
           </div>
@@ -649,7 +650,7 @@ export default function DashboardPage() {
             <div>
               <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Efectivo Disponible (Cash)</span>
               <h3 className="text-xl font-black font-mono mt-1 text-white [data-theme='light']:text-gray-900">
-                ${status?.cash_balance?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
+                ${status?.cash_balance?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"} USD
               </h3>
             </div>
           </div>
@@ -660,9 +661,9 @@ export default function DashboardPage() {
               {status?.total_pnl >= 0 ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
             </div>
             <div>
-              <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Ganancia / Pérdida ($)</span>
+              <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Ganancia / Pérdida</span>
               <h3 className={`text-xl font-black font-mono mt-1 ${status?.total_pnl >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                {status?.total_pnl >= 0 ? "+" : ""}${status?.total_pnl?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"}
+                {status?.total_pnl >= 0 ? "+" : ""}${status?.total_pnl?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"} USD
               </h3>
             </div>
           </div>
@@ -675,7 +676,7 @@ export default function DashboardPage() {
             <div>
               <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Monto Invertido</span>
               <h3 className={`text-xl font-black font-mono mt-1 text-white [data-theme='light']:text-gray-900`}>
-                ${((status?.assets_value || 0) - (status?.total_pnl || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${((status?.assets_value || 0) - (status?.total_pnl || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
               </h3>
             </div>
           </div>
@@ -718,9 +719,9 @@ export default function DashboardPage() {
                             </td>
                             <td className="py-4 text-center font-mono font-bold text-gray-300">{sec.porcentaje_objetivo.toFixed(1)}%</td>
                             <td className="py-4 text-center font-mono font-bold text-gray-400">{sec.porcentaje_real.toFixed(1)}%</td>
-                            <td className="py-4 text-right font-mono text-white [data-theme='light']:text-gray-900">${sec.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                            <td className="py-4 text-right font-mono text-white [data-theme='light']:text-gray-900">${sec.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD</td>
                             <td className={`py-4 text-right font-mono font-bold ${diff >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                              {diff >= 0 ? "+" : ""}${diff.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              {diff >= 0 ? "+" : ""}${diff.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD
                             </td>
                           </tr>
                         );
@@ -815,10 +816,10 @@ export default function DashboardPage() {
                     <div className="space-y-2 border-t border-gray-800/80 pt-3">
                       <span className="text-[10px] text-gray-500 uppercase tracking-widest font-black block mb-2">Sugerencia de Distribución</span>
                       {rebalanceResults.map((rec: any, idx: number) => (
-                        <div key={rec.nombre_seccion} className="flex justify-between items-center text-xs p-2 bg-gray-950/20 [data-theme='light']:bg-gray-100 rounded-lg border border-gray-800/30">
-                          <span className="font-semibold text-gray-300 [data-theme='light']:text-gray-700 truncate max-w-[120px]">{rec.nombre_seccion}</span>
+                        <div key={rec.nombre_seccion} className="flex justify-between items-center bg-gray-950/40 [data-theme='light']:bg-gray-100 p-2.5 rounded-lg border border-gray-800 [data-theme='light']:border-gray-200">
+                          <span className="text-gray-400 [data-theme='light']:text-gray-600 font-bold truncate max-w-[120px]">{rec.nombre_seccion}</span>
                           <div className="text-right font-mono">
-                            <span className="text-amber-500 font-bold block">${rec.monto_sugerido.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            <span className="text-amber-500 font-bold block">${rec.monto_sugerido.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD</span>
                             <span className="text-[9px] text-gray-500">{rec.porcentaje_sugerido.toFixed(0)}% de aportación</span>
                           </div>
                         </div>
@@ -945,11 +946,11 @@ export default function DashboardPage() {
                             </span>
                           </td>
                           <td className="p-3 text-right font-mono text-gray-300">{lot.cantidad.toFixed(4)}</td>
-                          <td className="p-3 text-right font-mono text-gray-400">${lot.precio_compra.toFixed(2)}</td>
-                          <td className="p-3 text-right font-mono text-gray-400">${lot.precio_actual.toFixed(2)}</td>
-                          <td className="p-3 text-right font-mono text-white [data-theme='light']:text-gray-900">${lot.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td className="p-3 text-right font-mono text-gray-400">${lot.precio_compra.toFixed(2)} USD</td>
+                          <td className="p-3 text-right font-mono text-gray-400">${lot.precio_actual.toFixed(2)} USD</td>
+                          <td className="p-3 text-right font-mono text-white [data-theme='light']:text-gray-900">${lot.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</td>
                           <td className={`p-3 text-right font-mono font-bold ${isPos ? "text-emerald-500" : "text-red-500"}`}>
-                            {isPos ? "+" : ""}${lot.pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            {isPos ? "+" : ""}${lot.pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
                           </td>
                           <td className={`p-3 text-right font-mono font-bold ${isPos ? "text-emerald-500" : "text-red-500"}`}>
                             {isPos ? "+" : ""}{lot.pnl_percent.toFixed(2)}%
@@ -1362,31 +1363,31 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Categoría (Sección)</label>
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Categoría de Yahoo</label>
                   <input 
                     type="text"
-                    list="secciones-list"
+                    value={yahooCategory || "Buscando..."}
+                    className="w-full bg-gray-900/50 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-gray-500 cursor-not-allowed"
+                    readOnly
+                    disabled
+                  />
+                </div>
+
+                <div className="space-y-1 col-span-2">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Sección del Portafolio</label>
+                  <select 
                     value={seccion}
                     onChange={(e) => setSeccion(e.target.value)}
-                    placeholder="Ej: ETFs, Tecnología..."
-                    className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 transition h-[38px]"
+                    className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 transition cursor-pointer h-[38px]"
                     required
-                  />
-                  <datalist id="secciones-list">
-                    {(status?.secciones?.length > 0 
-                      ? status.secciones 
-                      : [
-                          { nombre_seccion: "General" },
-                          { nombre_seccion: "Tecnología" },
-                          { nombre_seccion: "Bienes Raíces" },
-                          { nombre_seccion: "Salud" },
-                          { nombre_seccion: "Renta Fija" },
-                          { nombre_seccion: "Efectivo" }
-                        ]
-                    ).map((sec: any) => (
-                      <option key={sec.nombre_seccion} value={sec.nombre_seccion} />
+                  >
+                    <option value="" disabled>Selecciona una meta...</option>
+                    {(status?.secciones || []).map((sec: any) => (
+                      <option key={sec.nombre_seccion} value={sec.nombre_seccion}>
+                        {sec.nombre_seccion}
+                      </option>
                     ))}
-                  </datalist>
+                  </select>
                 </div>
               </div>
 
