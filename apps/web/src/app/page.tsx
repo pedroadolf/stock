@@ -24,6 +24,7 @@ import {
   Mail,
   Home,
   ChevronDown,
+  ChevronRight,
   User,
   Sun,
   Moon,
@@ -130,6 +131,9 @@ export default function DashboardPage() {
 
   // Lista estática de ETFs populares para comparación rápida
   const [showPopularETFs, setShowPopularETFs] = useState(true);
+
+  // Acordeón de la tabla de distribución
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
   // Carga inicial y listeners
   useEffect(() => {
@@ -711,19 +715,71 @@ export default function DashboardPage() {
                     <tbody className="divide-y divide-gray-800/40 text-xs">
                       {status?.secciones?.map((sec: any, idx: number) => {
                         const diff = sec.valor_actual - (sec.porcentaje_objetivo / 100 * status.total_value);
+                        const isExpanded = expandedSections[sec.nombre_seccion];
+                        
+                        // Encontrar holdings de esta seccion y ordenarlos de mayor a menor por valor_actual
+                        const seccionHoldings = status?.holdings
+                          ? status.holdings
+                              .filter((h: any) => h.seccion === sec.nombre_seccion)
+                              .sort((a: any, b: any) => b.valor_actual - a.valor_actual)
+                          : [];
+
                         return (
-                          <tr key={sec.nombre_seccion} className="hover:bg-gray-800/10">
-                            <td className="py-4 font-bold text-white [data-theme='light']:text-gray-900 flex items-center gap-2">
-                              <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
-                              {sec.nombre_seccion}
-                            </td>
-                            <td className="py-4 text-center font-mono font-bold text-gray-300">{sec.porcentaje_objetivo.toFixed(1)}%</td>
-                            <td className="py-4 text-center font-mono font-bold text-gray-400">{sec.porcentaje_real.toFixed(1)}%</td>
-                            <td className="py-4 text-right font-mono text-white [data-theme='light']:text-gray-900">${sec.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD</td>
-                            <td className={`py-4 text-right font-mono font-bold ${diff >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                              {diff >= 0 ? "+" : ""}${diff.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD
-                            </td>
-                          </tr>
+                          <React.Fragment key={sec.nombre_seccion}>
+                            <tr 
+                              className="hover:bg-gray-800/20 cursor-pointer transition-colors"
+                              onClick={() => setExpandedSections(prev => ({ ...prev, [sec.nombre_seccion]: !prev[sec.nombre_seccion] }))}
+                            >
+                              <td className="py-4 font-bold text-white [data-theme='light']:text-gray-900 flex items-center gap-2">
+                                <button className="text-gray-500 hover:text-white transition-colors p-1">
+                                  {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                </button>
+                                <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
+                                {sec.nombre_seccion}
+                              </td>
+                              <td className="py-4 text-center font-mono font-bold text-gray-300">{sec.porcentaje_objetivo.toFixed(1)}%</td>
+                              <td className="py-4 text-center font-mono font-bold text-gray-400">{sec.porcentaje_real.toFixed(1)}%</td>
+                              <td className="py-4 text-right font-mono text-white [data-theme='light']:text-gray-900">${sec.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD</td>
+                              <td className={`py-4 text-right font-mono font-bold ${diff >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                                {diff >= 0 ? "+" : ""}${diff.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD
+                              </td>
+                            </tr>
+                            
+                            {isExpanded && seccionHoldings.length > 0 && (
+                              <tr className="bg-gray-900/30">
+                                <td colSpan={5} className="p-0 border-t border-gray-800/30">
+                                  <div className="pl-12 pr-4 py-3 bg-gray-950/20">
+                                    <table className="w-full text-left">
+                                      <tbody className="divide-y divide-gray-800/20">
+                                        {seccionHoldings.map((h: any) => (
+                                          <tr key={h.ticker} className="text-[11px]">
+                                            <td className="py-2 flex items-center gap-2">
+                                              <span className="font-bold text-amber-500">{h.ticker}</span>
+                                              <span className="text-gray-500 truncate max-w-[150px]">{h.nombre}</span>
+                                            </td>
+                                            <td className="py-2 text-right font-mono text-gray-400">
+                                              {h.cantidad.toFixed(4)} tit.
+                                            </td>
+                                            <td className="py-2 text-right font-mono text-white">
+                                              ${h.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                            
+                            {isExpanded && seccionHoldings.length === 0 && (
+                              <tr className="bg-gray-900/30">
+                                <td colSpan={5} className="py-3 px-12 text-xs text-gray-500 italic">
+                                  Sin instrumentos en esta sección
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
                         );
                       })}
                     </tbody>
@@ -895,6 +951,7 @@ export default function DashboardPage() {
                       Símbolo <ArrowUpDown className="h-3 w-3 inline ml-1" />
                     </th>
                     <th className="p-3">Nombre del Instrumento</th>
+                    <th className="p-3 text-center">Origen</th>
                     <th className="p-3">Sección</th>
                     <th className="p-3 text-right">Títulos</th>
                     <th className="p-3 text-right cursor-pointer hover:bg-gray-800/20" onClick={() => handleSort('precio_compra')}>
@@ -940,6 +997,7 @@ export default function DashboardPage() {
                             </button>
                           </td>
                           <td className="p-3 font-semibold text-white [data-theme='light']:text-gray-900 truncate max-w-[150px]">{lot.nombre}</td>
+                          <td className="p-3 text-center font-bold text-gray-500">{lot.origen}</td>
                           <td className="p-3">
                             <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-indigo-500/10 text-indigo-400">
                               {lot.seccion}

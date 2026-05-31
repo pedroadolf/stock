@@ -15,8 +15,21 @@ MOCK_PRICES = {
     "CETES28": Decimal("10.00"),
 }
 
+import functools
+
 def datetime_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+@functools.lru_cache(maxsize=128)
+def get_ticker_region(ticker: str) -> str:
+    """Obtiene el país/región de un ticker desde Yahoo Finance (con caché)."""
+    if ticker.upper() == 'CASH':
+        return "N/A"
+    try:
+        info = yf.Ticker(ticker).info
+        return info.get('country') or info.get('region') or "Combinado"
+    except:
+        return "Combinado"
 
 def get_live_price(ticker: str, use_mock: bool = False) -> Decimal:
     """
@@ -392,10 +405,12 @@ class MCPRequestHandler:
                     pnl_percent = (pnl / hold["costo_total"] * 100) if hold["costo_total"] > 0 else 0
                     
                     nombre = names_map.get(ticker, f"Activo {ticker}")
+                    origen = get_ticker_region(ticker)
                     
                     active_holdings.append({
                         "ticker": ticker,
                         "nombre": nombre,
+                        "origen": origen,
                         "seccion": hold["seccion"],
                         "cantidad": float(hold["cantidad"]),
                         "costo_promedio": float(costo_promedio),
@@ -441,6 +456,7 @@ class MCPRequestHandler:
                     "fecha_adquisicion": op['created_at'],
                     "ticker": tk,
                     "nombre": names_map.get(tk, f"Activo {tk}"),
+                    "origen": get_ticker_region(tk),
                     "seccion": op['seccion'] or "Sin Categoría",
                     "cantidad": float(cant),
                     "precio_compra": float(pr_compra),
