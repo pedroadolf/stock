@@ -128,6 +128,8 @@ export default function DashboardPage() {
   const [yahooFundFamily, setYahooFundFamily] = useState("");
   const [instrumentType, setInstrumentType] = useState("");
   const [livePrice, setLivePrice] = useState<number | null>(null);
+  const [isManualAsset, setIsManualAsset] = useState(false);
+  const [manualPriceInput, setManualPriceInput] = useState("");
   const [montoUSD, setMontoUSD] = useState("");
   const [porcentajeInversion, setPorcentajeInversion] = useState("");
   const [buying, setBuying] = useState(false);
@@ -335,6 +337,65 @@ export default function DashboardPage() {
     }
   };
 
+  const resetBuyModal = () => {
+    setShowBuyModal(false);
+    setTicker("");
+    setCantidad("1");
+    setSeccion("");
+    setYahooCategory("");
+    setYahooFundFamily("");
+    setInstrumentType("");
+    setLivePrice(null);
+    setIsManualAsset(false);
+    setManualPriceInput("");
+    setMontoUSD("");
+    setPorcentajeInversion("");
+    setBuyError(null);
+  };
+
+  const handleOpenBuyModal = () => {
+    if (status?.secciones && status.secciones.length > 0) {
+      setSeccion(status.secciones[0].nombre_seccion);
+    }
+    setShowBuyModal(true);
+  };
+
+  const handleManualAssetToggle = (checked: boolean) => {
+    setIsManualAsset(checked);
+    if (checked) {
+      setLivePrice(null);
+      setYahooCategory("Manual");
+      setYahooFundFamily("N/A");
+      setInstrumentType("Stocks");
+    } else {
+      if (ticker) {
+        handleTickerBlur();
+      }
+    }
+  };
+
+  const handleManualPriceChange = (val: string) => {
+    setManualPriceInput(val);
+    const price = parseFloat(val) || 0;
+    if (!price) {
+      setMontoUSD("");
+      setPorcentajeInversion("");
+      return;
+    }
+    if (cantidad && !isNaN(parseFloat(cantidad))) {
+      const cant = parseFloat(cantidad);
+      const m = cant * price;
+      setMontoUSD(m.toFixed(2));
+      if (status?.total_value && status.total_value > 0) {
+        setPorcentajeInversion(((m / status.total_value) * 100).toFixed(2));
+      }
+    } else if (montoUSD && !isNaN(parseFloat(montoUSD))) {
+      const m = parseFloat(montoUSD);
+      const cant = m / price;
+      setCantidad(cant.toString());
+    }
+  };
+
   const handleRegisterBuy = async (e: React.FormEvent) => {
     e.preventDefault();
     setBuyError(null);
@@ -359,14 +420,11 @@ export default function DashboardPage() {
         ticker.toUpperCase(),
         cantFloat,
         seccion,
-        undefined
+        isManualAsset ? (parseFloat(manualPriceInput) || undefined) : undefined
       );
 
       if (result.success) {
-        setShowBuyModal(false);
-        setTicker("");
-        setCantidad("1");
-        setInstrumentType("");
+        resetBuyModal();
         await refreshPortfolioStatus(selectedPortfolioId, userId);
       }
     } catch (err: any) {
@@ -404,8 +462,14 @@ export default function DashboardPage() {
       // 2. Obtener Precio en Vivo
       const resPrice = await backendApi.getInstrumentDetails(ticker.trim());
       if (resPrice && resPrice.success && resPrice.data?.precio_actual_vivo) {
-        const price = resPrice.data.precio_actual_vivo;
+        let price = resPrice.data.precio_actual_vivo;
+        const isMxn = status?.moneda === "MXN";
+        const rate = status?.usd_mxn_rate || 18.00;
+        if (isMxn) {
+          price = price * rate;
+        }
         setLivePrice(price);
+        setIsManualAsset(false);
         
         // Recalcular montos si ya hay cantidad
         if (cantidad && !isNaN(parseFloat(cantidad))) {
@@ -418,21 +482,31 @@ export default function DashboardPage() {
         }
       } else {
         setLivePrice(null);
+        setIsManualAsset(true);
+        setYahooCategory("Manual");
+        setYahooFundFamily("N/A");
+        setInstrumentType("Stocks");
       }
     } catch (err) {
       console.error("Error al obtener detalles del ticker", err);
+      setLivePrice(null);
+      setIsManualAsset(true);
+      setYahooCategory("Manual");
+      setYahooFundFamily("N/A");
+      setInstrumentType("Stocks");
     }
   };
 
   const handleCantidadChange = (val: string) => {
     setCantidad(val);
-    if (!val || isNaN(parseFloat(val)) || !livePrice) {
+    const activePrice = isManualAsset ? (parseFloat(manualPriceInput) || 0) : (livePrice || 0);
+    if (!val || isNaN(parseFloat(val)) || !activePrice) {
       setMontoUSD("");
       setPorcentajeInversion("");
       return;
     }
     const cant = parseFloat(val);
-    const m = cant * livePrice;
+    const m = cant * activePrice;
     setMontoUSD(m.toFixed(2));
     if (status?.total_value && status.total_value > 0) {
       setPorcentajeInversion(((m / status.total_value) * 100).toFixed(2));
@@ -443,14 +517,15 @@ export default function DashboardPage() {
 
   const handleMontoChange = (val: string) => {
     setMontoUSD(val);
-    if (!val || isNaN(parseFloat(val)) || !livePrice) {
+    const activePrice = isManualAsset ? (parseFloat(manualPriceInput) || 0) : (livePrice || 0);
+    if (!val || isNaN(parseFloat(val)) || !activePrice) {
       setCantidad("");
       setPorcentajeInversion("");
       return;
     }
     const m = parseFloat(val);
-    const cant = m / livePrice;
-    setCantidad(cant.toString()); // Permitimos decimales
+    const cant = m / activePrice;
+    setCantidad(cant.toString());
     if (status?.total_value && status.total_value > 0) {
       setPorcentajeInversion(((m / status.total_value) * 100).toFixed(2));
     } else {
@@ -460,7 +535,8 @@ export default function DashboardPage() {
 
   const handlePorcentajeChange = (val: string) => {
     setPorcentajeInversion(val);
-    if (!val || isNaN(parseFloat(val)) || !livePrice || !status?.total_value || status.total_value <= 0) {
+    const activePrice = isManualAsset ? (parseFloat(manualPriceInput) || 0) : (livePrice || 0);
+    if (!val || isNaN(parseFloat(val)) || !activePrice || !status?.total_value || status.total_value <= 0) {
       setCantidad("");
       setMontoUSD("");
       return;
@@ -468,7 +544,7 @@ export default function DashboardPage() {
     const p = parseFloat(val);
     const m = (p / 100) * status.total_value;
     setMontoUSD(m.toFixed(2));
-    const cant = m / livePrice;
+    const cant = m / activePrice;
     setCantidad(cant.toString());
   };
 
@@ -614,7 +690,7 @@ export default function DashboardPage() {
         {/* Acciones Rápidas */}
         <div className="pt-4 border-t border-gray-800/60 [data-theme='light']:border-gray-200/60 space-y-2">
           <button 
-            onClick={() => setShowBuyModal(true)} 
+            onClick={handleOpenBuyModal} 
             className="w-full gostock-btn-primary flex items-center justify-center gap-2 py-2.5 cursor-pointer text-xs"
           >
             <Plus className="h-4 w-4" />
@@ -699,7 +775,7 @@ export default function DashboardPage() {
             <div>
               <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Valor Total Portafolio</span>
               <h3 className="text-xl font-black font-mono mt-1 text-white [data-theme='light']:text-gray-900">
-                ${status?.total_value?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"} USD
+                ${status?.total_value?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"} {status?.moneda || 'USD'}
               </h3>
             </div>
           </div>
@@ -712,7 +788,7 @@ export default function DashboardPage() {
             <div>
               <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Efectivo Disponible (Cash)</span>
               <h3 className="text-xl font-black font-mono mt-1 text-white [data-theme='light']:text-gray-900">
-                ${status?.cash_balance?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"} USD
+                ${status?.cash_balance?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"} {status?.moneda || 'USD'}
               </h3>
             </div>
           </div>
@@ -725,7 +801,7 @@ export default function DashboardPage() {
             <div>
               <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Ganancia / Pérdida</span>
               <h3 className={`text-xl font-black font-mono mt-1 ${status?.total_pnl >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                {status?.total_pnl >= 0 ? "+" : ""}${status?.total_pnl?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"} USD
+                {status?.total_pnl >= 0 ? "+" : ""}${status?.total_pnl?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"} {status?.moneda || 'USD'}
               </h3>
             </div>
           </div>
@@ -738,7 +814,7 @@ export default function DashboardPage() {
             <div>
               <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Monto Invertido</span>
               <h3 className={`text-xl font-black font-mono mt-1 text-white [data-theme='light']:text-gray-900`}>
-                ${((status?.assets_value || 0) - (status?.total_pnl || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                ${((status?.assets_value || 0) - (status?.total_pnl || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}
               </h3>
             </div>
           </div>
@@ -797,9 +873,9 @@ export default function DashboardPage() {
                               </td>
                               <td className="py-4 text-center font-mono font-bold text-gray-300">{sec.porcentaje_objetivo.toFixed(1)}%</td>
                               <td className="py-4 text-center font-mono font-bold text-gray-400">{sec.porcentaje_real.toFixed(1)}%</td>
-                              <td className="py-4 text-right font-mono text-white [data-theme='light']:text-gray-900">${sec.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD</td>
+                              <td className="py-4 text-right font-mono text-white [data-theme='light']:text-gray-900">${sec.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
                               <td className={`py-4 text-right font-mono font-bold ${diff >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                                {diff >= 0 ? "+" : ""}${diff.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD
+                                {diff >= 0 ? "+" : ""}${diff.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}
                               </td>
                             </tr>
                             
@@ -819,7 +895,7 @@ export default function DashboardPage() {
                                               {h.cantidad.toFixed(4)} tit.
                                             </td>
                                             <td className="py-2 text-right font-mono text-white">
-                                              ${h.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD
+                                              ${h.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}
                                             </td>
                                           </tr>
                                         ))}
@@ -901,7 +977,7 @@ export default function DashboardPage() {
                         placeholder="Monto de aportación"
                         className="w-full bg-[#111827] [data-theme='light']:bg-white border border-gray-800 [data-theme='light']:border-gray-300 rounded-xl pl-8 pr-12 py-1.5 text-xs font-mono font-bold text-white [data-theme='light']:text-gray-900 focus:outline-none focus:border-amber-500 transition"
                       />
-                      <span className="absolute right-4 top-2 text-[9px] text-gray-500 font-black">USD</span>
+                      <span className="absolute right-4 top-2 text-[9px] text-gray-500 font-black">{status?.moneda || 'USD'}</span>
                     </div>
 
                     <div className="flex gap-2">
@@ -933,7 +1009,7 @@ export default function DashboardPage() {
                         <div key={rec.nombre_seccion} className="flex justify-between items-center bg-gray-950/40 [data-theme='light']:bg-gray-100 p-2.5 rounded-lg border border-gray-800 [data-theme='light']:border-gray-200">
                           <span className="text-gray-400 [data-theme='light']:text-gray-600 font-bold truncate max-w-[120px]">{rec.nombre_seccion}</span>
                           <div className="text-right font-mono">
-                            <span className="text-amber-500 font-bold block">${rec.monto_sugerido.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD</span>
+                            <span className="text-amber-500 font-bold block">${rec.monto_sugerido.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}</span>
                             <span className="text-[9px] text-gray-500">{rec.porcentaje_sugerido.toFixed(0)}% de aportación</span>
                           </div>
                         </div>
@@ -1062,11 +1138,11 @@ export default function DashboardPage() {
                             </span>
                           </td>
                           <td className="p-3 text-right font-mono text-gray-300">{lot.cantidad.toFixed(4)}</td>
-                          <td className="p-3 text-right font-mono text-gray-400">${lot.precio_compra.toFixed(2)} USD</td>
-                          <td className="p-3 text-right font-mono text-gray-400">${lot.precio_actual.toFixed(2)} USD</td>
-                          <td className="p-3 text-right font-mono text-white [data-theme='light']:text-gray-900">${lot.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD</td>
+                          <td className="p-3 text-right font-mono text-gray-400">${lot.precio_compra.toFixed(2)} {status?.moneda || 'USD'}</td>
+                          <td className="p-3 text-right font-mono text-gray-400">${lot.precio_actual.toFixed(2)} {status?.moneda || 'USD'}</td>
+                          <td className="p-3 text-right font-mono text-white [data-theme='light']:text-gray-900">${lot.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
                           <td className={`p-3 text-right font-mono font-bold ${isPos ? "text-emerald-500" : "text-red-500"}`}>
-                            {isPos ? "+" : ""}${lot.pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                            {isPos ? "+" : ""}${lot.pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}
                           </td>
                           <td className={`p-3 text-right font-mono font-bold ${isPos ? "text-emerald-500" : "text-red-500"}`}>
                             {isPos ? "+" : ""}{lot.pnl_percent.toFixed(2)}%
@@ -1467,19 +1543,50 @@ export default function DashboardPage() {
                 <div className="flex justify-between items-center pb-2 border-b border-gray-800">
                   <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">Calculadora de Inversión</span>
                   <span className="text-xs text-gray-500">
-                    Capital Total: <strong className="text-white">${status?.total_value?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'} USD</strong>
+                    Capital Total: <strong className="text-white">${status?.total_value?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'} {status?.moneda || 'USD'}</strong>
                   </span>
                 </div>
                 
-                {livePrice && (
-                  <div className="text-[10px] text-emerald-500 font-mono text-right">
-                    Precio Actual (Yahoo): ${livePrice.toFixed(2)} USD
+                {/* Switch Manual y Precio Unitario */}
+                <div className="flex flex-col gap-2 bg-[#0d121f] p-3 rounded-xl border border-gray-800">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-gray-400 font-bold cursor-pointer select-none flex items-center gap-2">
+                      <input 
+                        type="checkbox" 
+                        checked={isManualAsset} 
+                        onChange={(e) => handleManualAssetToggle(e.target.checked)}
+                        className="rounded border-gray-800 text-amber-500 focus:ring-amber-500/20 bg-gray-900 cursor-pointer"
+                      />
+                      Activo Manual (Sin cotización en Yahoo)
+                    </label>
                   </div>
-                )}
+                  
+                  {isManualAsset && (
+                    <div className="space-y-1 mt-1.5 border-t border-gray-800/40 pt-2">
+                      <label className="text-[10px] font-bold text-amber-500 uppercase tracking-wide">Precio Unitario ({status?.moneda || 'USD'})</label>
+                      <input 
+                        type="number"
+                        value={manualPriceInput}
+                        onChange={(e) => handleManualPriceChange(e.target.value)}
+                        placeholder="Ingresa el precio unitario..."
+                        className="w-full bg-[#111827] border border-amber-500/30 rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
+                        min="0"
+                        step="any"
+                        required={isManualAsset}
+                      />
+                    </div>
+                  )}
+
+                  {!isManualAsset && livePrice && (
+                    <div className="text-[10px] text-emerald-500 font-mono text-right mt-1 border-t border-gray-800/40 pt-2">
+                      Precio en Vivo ({status?.moneda || 'USD'}): ${livePrice.toFixed(2)}
+                    </div>
+                  )}
+                </div>
                 
                 <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Monto (USD)</label>
+                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Monto ({status?.moneda || 'USD'})</label>
                     <input 
                       type="number"
                       value={montoUSD}
@@ -1575,7 +1682,7 @@ export default function DashboardPage() {
               <div className="flex justify-end gap-3 pt-2">
                 <button 
                   type="button" 
-                  onClick={() => setShowBuyModal(false)}
+                  onClick={resetBuyModal}
                   className="px-4 py-2 border border-gray-800 text-gray-400 hover:text-white rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer"
                 >
                   Cancelar

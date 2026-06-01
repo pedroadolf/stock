@@ -52,7 +52,8 @@ export const backendApi = {
     nombre: string,
     descripcion: string,
     initialCash: number,
-    secciones: Array<{ nombre_seccion: string; porcentaje_objetivo: number }>
+    secciones: Array<{ nombre_seccion: string; porcentaje_objetivo: number }>,
+    moneda: string = "USD"
   ): Promise<{ success: boolean; portfolio_id: string; numero_portafolio: string; message: string }> {
     return fetchFromBackend('/api/trades/portfolio', {
       method: 'POST',
@@ -62,6 +63,7 @@ export const backendApi = {
         descripcion,
         initial_cash: initialCash,
         secciones,
+        moneda,
       }),
     });
   },

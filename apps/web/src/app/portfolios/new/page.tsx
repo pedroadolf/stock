@@ -27,6 +27,8 @@ export default function NewPortfolioPage() {
   const [nombre, setNombre] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [initialCash, setInitialCash] = useState<number>(100000);
+  const [moneda, setMoneda] = useState("USD");
+  const [preset, setPreset] = useState("classic");
   
   // Secciones por defecto para facilitarle al usuario
   const [secciones, setSecciones] = useState<SectionInput[]>([
@@ -34,6 +36,45 @@ export default function NewPortfolioPage() {
     { nombre_seccion: "CETEs (Renta Fija)", porcentaje_objetivo: 30 },
     { nombre_seccion: "Criptomonedas", porcentaje_objetivo: 20 }
   ]);
+
+  const applyPreset = (presetName: string, selectedMoneda?: string) => {
+    setPreset(presetName);
+    const currMoneda = selectedMoneda || moneda;
+    
+    if (presetName === "classic") {
+      setSecciones([
+        { nombre_seccion: "Acciones USA", porcentaje_objetivo: 50 },
+        { nombre_seccion: "CETEs (Renta Fija)", porcentaje_objetivo: 30 },
+        { nombre_seccion: "Criptomonedas", porcentaje_objetivo: 20 }
+      ]);
+      if (currMoneda === "MXN") {
+        setInitialCash(1800000);
+      } else {
+        setInitialCash(100000);
+      }
+    } else if (presetName === "pash") {
+      setSecciones([
+        { nombre_seccion: "PPR (Allianz)", porcentaje_objetivo: 45 },
+        { nombre_seccion: "CETEs", porcentaje_objetivo: 20 },
+        { nombre_seccion: "Sofipos (Revolut)", porcentaje_objetivo: 15 },
+        { nombre_seccion: "ETFs (Fórmula VTI/QQQM/AVUV)", porcentaje_objetivo: 20 }
+      ]);
+      if (currMoneda === "MXN") {
+        setInitialCash(224000);
+      } else {
+        setInitialCash(12440);
+      }
+    } else {
+      setSecciones([
+        { nombre_seccion: "", porcentaje_objetivo: 0 }
+      ]);
+    }
+  };
+
+  const handleMonedaChange = (val: string) => {
+    setMoneda(val);
+    applyPreset(preset, val);
+  };
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,7 +134,8 @@ export default function NewPortfolioPage() {
         nombre,
         descripcion,
         initialCash,
-        secciones
+        secciones,
+        moneda
       );
 
       if (!result.success) {
@@ -164,8 +206,37 @@ export default function NewPortfolioPage() {
               />
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label htmlFor="moneda" className="text-xs font-bold text-gray-400 uppercase tracking-wide">Moneda Base</label>
+                <select 
+                  id="moneda"
+                  value={moneda} 
+                  onChange={(e) => handleMonedaChange(e.target.value)}
+                  className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-gray-100 focus:outline-none focus:border-amber-500 transition cursor-pointer"
+                >
+                  <option value="USD">Dólares (USD)</option>
+                  <option value="MXN">Pesos (MXN)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="preset" className="text-xs font-bold text-gray-400 uppercase tracking-wide">Estrategia Predefinida</label>
+                <select 
+                  id="preset"
+                  value={preset} 
+                  onChange={(e) => applyPreset(e.target.value)}
+                  className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-sm text-gray-100 focus:outline-none focus:border-amber-500 transition cursor-pointer"
+                >
+                  <option value="classic">Estrategia Clásica (3 Rubros)</option>
+                  <option value="pash">Estrategia Pash (4 Rubros Real)</option>
+                  <option value="custom">Personalizado (Crear desde cero)</option>
+                </select>
+              </div>
+            </div>
+
             <div className="space-y-1">
-              <label htmlFor="initialCash" className="text-xs font-bold text-gray-400 uppercase tracking-wide">Saldo Inicial de Simulación (USD)</label>
+              <label htmlFor="initialCash" className="text-xs font-bold text-gray-400 uppercase tracking-wide">Saldo Inicial de Simulación ({moneda})</label>
               <div className="relative">
                 <span className="absolute left-4 top-2.5 text-gray-500 font-mono text-sm">$</span>
                 <input 
@@ -179,7 +250,7 @@ export default function NewPortfolioPage() {
                   required
                 />
               </div>
-              <p className="text-[10px] text-gray-500">Este saldo libre se depositará en tu cuenta de transacciones para simular compras de activos.</p>
+              <p className="text-[10px] text-gray-500">Este saldo libre se depositará en tu cuenta de transacciones en {moneda} para simular compras de activos.</p>
             </div>
           </div>
 

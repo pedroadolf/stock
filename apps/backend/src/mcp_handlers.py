@@ -107,7 +107,7 @@ class MCPRequestHandler:
         except Exception as ex:
             print(f"Error escribiendo workflow_logs: {str(ex)}")
 
-    def create_portfolio(self, user_id: str, nombre: str, descripcion: str, initial_cash: float, secciones: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def create_portfolio(self, user_id: str, nombre: str, descripcion: str, initial_cash: float, secciones: List[Dict[str, Any]], moneda: str = "USD") -> Dict[str, Any]:
         """
         Crea un nuevo portafolio, inicializa sus secciones y genera una transacción de fondeo inicial.
         """
@@ -119,14 +119,28 @@ class MCPRequestHandler:
                 "nombre_portafolio": nombre,
                 "descripcion": descripcion,
                 "numero_portafolio": num_ref,
-                "status": "activo"
+                "status": "activo",
+                "moneda": moneda
             }
-            port_res = self.supabase.table('portafolios').insert(port_data).execute()
+            
+            try:
+                port_res = self.supabase.table('portafolios').insert(port_data).execute()
+            except Exception as db_err:
+                # Fallback por si la columna 'moneda' no existe en la base de datos aún
+                if "moneda" in str(db_err) or "column" in str(db_err):
+                    port_data_fallback = port_data.copy()
+                    port_data_fallback.pop("moneda", None)
+                    port_res = self.supabase.table('portafolios').insert(port_data_fallback).execute()
+                else:
+                    raise db_err
+                    
             if not port_res.data:
                 return {"success": False, "error": "No se pudo crear el portafolio"}
             
             portfolio = port_res.data[0]
             portfolio_id = portfolio['id']
+            # En caso de fallback, leer la moneda guardada (que será USD por defecto si no existe la columna)
+            moneda_guardada = portfolio.get('moneda', 'USD')
             
             # 2. Insertar secciones objetivo
             secciones_insert = []
@@ -160,7 +174,7 @@ class MCPRequestHandler:
                     "operacion_id": op_id,
                     "tipo_movimiento": "abono",
                     "monto_total": float(initial_cash),
-                    "moneda": "USD",
+                    "moneda": moneda_guardada,
                     "metadata": {"nota": "Depósito de fondeo inicial"}
                 }
                 self.supabase.table('transacciones').insert(trans_data).execute()
@@ -169,16 +183,23 @@ class MCPRequestHandler:
                 "success": True,
                 "portfolio_id": portfolio_id,
                 "numero_portafolio": num_ref,
-                "message": f"Portafolio creado exitosamente con fondeo de ${initial_cash:.2f} USD."
+                "message": f"Portafolio creado exitosamente con fondeo de ${initial_cash:.2f} {moneda_guardada}."
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
+
 
     def add_funds(self, portfolio_id: str, user_id: str, amount: float) -> Dict[str, Any]:
         """
         Deposita fondos al portafolio.
         """
         try:
+            # Obtener moneda del portafolio
+            port_res = self.supabase.table('portafolios').select('moneda').eq('id', portfolio_id).execute()
+            moneda = "USD"
+            if port_res.data:
+                moneda = port_res.data[0].get('moneda', 'USD')
+
             op_data = {
                 "portafolio_id": portfolio_id,
                 "user_id": user_id,
@@ -198,17 +219,18 @@ class MCPRequestHandler:
                     "operacion_id": op_id,
                     "tipo_movimiento": "abono",
                     "monto_total": float(amount),
-                    "moneda": "USD",
+                    "moneda": moneda,
                     "metadata": {"nota": "Depósito de fondeo"}
                 }
                 self.supabase.table('transacciones').insert(trans_data).execute()
                 
             return {
                 "success": True,
-                "message": f"Se han depositado ${amount:.2f} USD al portafolio."
+                "message": f"Se han depositado ${amount:.2f} {moneda} al portafolio."
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
+
 
     def execute_simulate_buy(self, portfolio_id: str, user_id: str, ticker: str, cantidad: float, seccion: str, valor_actual_manual: Optional[float] = None) -> Dict[str, Any]:
         """
@@ -230,6 +252,8 @@ class MCPRequestHandler:
                 return {"success": False, "error": f"No se pudo obtener el saldo del portafolio: {error_msg}", "status_code": 500}
                 
             cash_balance = Decimal(str(status_data["cash_balance"]))
+            moneda = status_data.get("moneda", "USD")
+            usd_mxn_rate = Decimal(str(status_data.get("usd_mxn_rate", 1.0)))
             
             # 3. Obtener cotización actual
             is_manual = valor_actual_manual is not None
@@ -237,6 +261,8 @@ class MCPRequestHandler:
                 price = Decimal(str(valor_actual_manual))
             else:
                 price = get_live_price(ticker)
+                if moneda == "MXN":
+                    price = price * usd_mxn_rate
                 
             monto_compra = Decimal(str(cantidad)) * price
             comision = monto_compra * Decimal("0.0015")  # 0.15% comisión
@@ -246,7 +272,7 @@ class MCPRequestHandler:
             if cash_balance < total_cargo:
                 return {
                     "success": False, 
-                    "error": f"Fondos insuficientes. Requerido: ${total_cargo:.2f} USD, Disponible: ${cash_balance:.2f} USD",
+                    "error": f"Fondos insuficientes. Requerido: ${total_cargo:.2f} {moneda}, Disponible: ${cash_balance:.2f} {moneda}",
                     "status_code": 400
                 }
                 
@@ -269,14 +295,14 @@ class MCPRequestHandler:
                 return {"success": False, "error": "No se pudo registrar la operación", "status_code": 500}
                 
             op_id = op_res.data[0]['id']
-            self._log_workflow_step(op_id, "VALIDATE_PRICE", "completed", f"Cotización obtenida: ${price:.2f} USD. Total cargo proyectado: ${total_cargo:.2f} USD.")
+            self._log_workflow_step(op_id, "VALIDATE_PRICE", "completed", f"Cotización obtenida: ${price:.2f} {moneda}. Total cargo proyectado: ${total_cargo:.2f} {moneda}.")
             
             # 6. Registrar la transacción contable (cargo al efectivo)
             trans_data = {
                 "operacion_id": op_id,
                 "tipo_movimiento": "cargo",
                 "monto_total": float(total_cargo),
-                "moneda": "USD",
+                "moneda": moneda,
                 "metadata": {
                     "ticker": ticker.upper(),
                     "cantidad": float(cantidad),
@@ -309,6 +335,7 @@ class MCPRequestHandler:
             
         except Exception as e:
             return {"success": False, "error": str(e), "status_code": 500}
+
 
     def delete_operation(self, op_id: str, user_id: str) -> Dict[str, Any]:
         """
@@ -365,6 +392,17 @@ class MCPRequestHandler:
             if str(portfolio['user_id']) != str(user_id):
                 return {"success": False, "error": "Acceso no autorizado"}
                 
+            moneda = portfolio.get('moneda', 'USD')
+            usd_mxn_rate = Decimal("1.0")
+            if moneda == "MXN":
+                try:
+                    usd_mxn_rate = get_live_price("USDMXN=X")
+                    if usd_mxn_rate <= Decimal("0.01"):
+                        usd_mxn_rate = Decimal("18.00")
+                except Exception as ex:
+                    print(f"⚠️ Error obteniendo tipo de cambio: {str(ex)}")
+                    usd_mxn_rate = Decimal("18.00")
+
             secciones_target = portfolio.get('portafolio_secciones', [])
             target_map = {sec['nombre_seccion']: float(sec['porcentaje_objetivo']) for sec in secciones_target}
             
@@ -432,13 +470,14 @@ class MCPRequestHandler:
                     is_manual = hold["valor_actual_manual"] is not None
                     if is_manual:
                         current_price = hold["valor_actual_manual"]
-                        current_value = hold["cantidad"] * current_price
                     else:
                         current_price = get_live_price(ticker)
-                        current_value = hold["cantidad"] * current_price
+                        if moneda == "MXN":
+                            current_price = current_price * usd_mxn_rate
                         
-                    assets_total_value += current_value
+                    assets_total_value += hold["cantidad"] * current_price
                     costo_promedio = hold["costo_total"] / hold["cantidad"]
+                    current_value = hold["cantidad"] * current_price
                     pnl = current_value - hold["costo_total"]
                     pnl_percent = (pnl / hold["costo_total"] * 100) if hold["costo_total"] > 0 else 0
                     
@@ -483,6 +522,8 @@ class MCPRequestHandler:
                     pr_actual = Decimal(str(op['valor_actual_manual']))
                 else:
                     pr_actual = get_live_price(tk)
+                    if moneda == "MXN":
+                        pr_actual = pr_actual * usd_mxn_rate
                     
                 v_actual = cant * pr_actual
                 pnl_abs = v_actual - c_total
@@ -543,6 +584,8 @@ class MCPRequestHandler:
                 "portfolio_id": portfolio_id,
                 "nombre_portafolio": portfolio["nombre_portafolio"],
                 "numero_portafolio": portfolio["numero_portafolio"],
+                "moneda": moneda,
+                "usd_mxn_rate": float(usd_mxn_rate),
                 "cash_balance": float(cash_balance),
                 "assets_value": float(assets_total_value),
                 "total_value": float(total_portfolio_value),
@@ -556,6 +599,7 @@ class MCPRequestHandler:
             
         except Exception as e:
             return {"success": False, "error": str(e)}
+
 
     def get_instrument_metadata(self, ticker: str) -> Dict[str, Any]:
         """

@@ -34,6 +34,8 @@ class CreatePortfolioRequest(BaseModel):
     descripcion: str
     initial_cash: float
     secciones: List[SectionDefinition]
+    moneda: Optional[str] = "USD"
+
 
 
 # --- Dependencia para Supabase ---
@@ -86,7 +88,8 @@ def create_portfolio_endpoint(
         nombre=payload.nombre,
         descripcion=payload.descripcion,
         initial_cash=payload.initial_cash,
-        secciones=secciones_dict
+        secciones=secciones_dict,
+        moneda=payload.moneda
     )
     
     if not result.get("success"):
