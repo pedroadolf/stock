@@ -79,8 +79,8 @@ export default function NewPortfolioPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Calcular la suma de porcentajes
-  const totalPercentage = secciones.reduce((sum, sec) => sum + sec.porcentaje_objetivo, 0);
+  // Calcular la suma de porcentajes con redondeo de punto flotante a 1 decimal
+  const totalPercentage = parseFloat(secciones.reduce((sum, sec) => sum + sec.porcentaje_objetivo, 0).toFixed(1));
 
   const handleAddSection = () => {
     setSecciones([...secciones, { nombre_seccion: "", porcentaje_objetivo: 0 }]);
@@ -296,6 +296,7 @@ export default function NewPortfolioPage() {
                         className="w-full bg-gray-900 border border-gray-800 rounded-lg pl-3 pr-6 py-1.5 text-xs font-mono text-gray-100 focus:outline-none focus:border-amber-500 transition"
                         min="0"
                         max="100"
+                        step="0.1"
                         required
                       />
                       <span className="absolute right-2 top-1.5 text-gray-500 text-xs">%</span>
@@ -319,7 +320,7 @@ export default function NewPortfolioPage() {
               <span className="text-xs text-gray-400 font-bold">Total Asignado:</span>
               <div className="flex items-center gap-2">
                 <span className={`text-sm font-bold font-mono ${totalPercentage === 100 ? "text-emerald-500" : "text-amber-500"}`}>
-                  {totalPercentage}%
+                  {totalPercentage.toFixed(1)}%
                 </span>
                 {totalPercentage === 100 ? (
                   <CheckCircle2 className="h-4.5 w-4.5 text-emerald-500" />
