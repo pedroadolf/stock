@@ -1565,8 +1565,9 @@ export default function DashboardPage() {
 
       {/* ─── REGISTRAR COMPRA MODAL ────────────────────────────────────────── */}
       {showBuyModal && (
-        <div className="fixed inset-0 bg-[#000000]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-[#0d1117] border border-gray-800 rounded-3xl max-w-3xl w-full shadow-2xl relative my-4">
+        <div className="fixed inset-0 bg-[#000000]/80 backdrop-blur-sm z-50">
+          <div className="h-full overflow-y-auto py-6 px-4 flex justify-center">
+            <div className="bg-[#0d1117] border border-gray-800 rounded-3xl max-w-3xl w-full shadow-2xl relative self-start">
 
             {/* ── Header ── */}
             <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-800">
