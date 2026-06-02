@@ -232,7 +232,7 @@ class MCPRequestHandler:
             return {"success": False, "error": str(e)}
 
 
-    def execute_simulate_buy(self, portfolio_id: str, user_id: str, ticker: str, cantidad: float, seccion: str, valor_actual_manual: Optional[float] = None) -> Dict[str, Any]:
+    def execute_simulate_buy(self, portfolio_id: str, user_id: str, ticker: str, cantidad: float, seccion: str, valor_actual_manual: Optional[float] = None, porcentaje_objetivo_instrumento: Optional[float] = None) -> Dict[str, Any]:
         """
         Ejecuta la compra simulada de un activo validando fondos disponibles del portafolio.
         """
@@ -321,6 +321,19 @@ class MCPRequestHandler:
             }
             self.supabase.table('operaciones').update(update_data).eq('id', op_id).execute()
             self._log_workflow_step(op_id, "ORCHESTRATOR_FINISHED", "completed", f"Operación de compra finalizada con éxito.")
+            
+            # Guardar el objetivo del instrumento si se especificó
+            if porcentaje_objetivo_instrumento is not None:
+                try:
+                    self.save_instrument_target(
+                        portfolio_id=portfolio_id,
+                        user_id=user_id,
+                        seccion=seccion,
+                        ticker=ticker,
+                        porcentaje_objetivo=porcentaje_objetivo_instrumento
+                    )
+                except Exception as ex:
+                    print(f"⚠️ Warning: No se pudo guardar el objetivo del instrumento al comprar: {str(ex)}")
             
             return {
                 "success": True,
@@ -579,6 +592,48 @@ class MCPRequestHandler:
             total_pnl = float(assets_total_value) - total_cost
             total_pnl_percent = (total_pnl / total_cost * 100) if total_cost > 0 else 0
             
+            # 6. Enriquecer active_holdings con datos de objetivos de instrumentos
+            try:
+                target_inst_res = self.supabase.table('portafolio_instrumentos_objetivo').select('*').eq('portafolio_id', portfolio_id).execute()
+                inst_target_map = {item['ticker']: float(item['porcentaje_objetivo']) for item in target_inst_res.data} if target_inst_res.data else {}
+            except Exception as e:
+                print(f"⚠️ Warning: portafolio_instrumentos_objetivo query failed (migration might not be applied yet): {str(e)}")
+                inst_target_map = {}
+
+            for hold in active_holdings:
+                ticker = hold["ticker"]
+                sec = hold["seccion"]
+                
+                # Objetivo de la clase (e.g. 5%)
+                class_target_pct = target_map.get(sec, 0.0)
+                
+                # Objetivo del instrumento dentro de su clase (e.g. 45% de la clase)
+                inst_target_pct_clase = inst_target_map.get(ticker, 0.0)
+                
+                # Objetivo del instrumento respecto al total del portafolio (e.g. 45% de 5% = 2.25%)
+                inst_target_pct_total = (inst_target_pct_clase / 100.0) * class_target_pct
+                
+                # Valor actual de la clase
+                val_clase = float(section_values.get(sec, Decimal("0.00")))
+                
+                # Porcentaje real respecto a la clase
+                inst_actual_pct_clase = (hold["valor_actual"] / val_clase * 100.0) if val_clase > 0 else 0.0
+                
+                # Porcentaje real respecto al total
+                inst_actual_pct_total = (hold["valor_actual"] / float(total_portfolio_value) * 100.0) if total_portfolio_value > 0 else 0.0
+                
+                # Valor objetivo en dinero
+                inst_target_value = (inst_target_pct_total / 100.0) * float(total_portfolio_value)
+                
+                # Diferencia/Desviación en valor
+                desviacion_valor = hold["valor_actual"] - inst_target_value
+                
+                hold["porcentaje_objetivo_clase"] = inst_target_pct_clase
+                hold["porcentaje_objetivo_total"] = inst_target_pct_total
+                hold["porcentaje_real_clase"] = inst_actual_pct_clase
+                hold["porcentaje_real_total"] = inst_actual_pct_total
+                hold["desviacion_valor"] = desviacion_valor
+            
             return {
                 "success": True,
                 "portfolio_id": portfolio_id,
@@ -597,6 +652,35 @@ class MCPRequestHandler:
                 "cash_percent": float(pct_cash)
             }
             
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def save_instrument_target(self, portfolio_id: str, user_id: str, seccion: str, ticker: str, porcentaje_objetivo: float) -> Dict[str, Any]:
+        """
+        Guarda o actualiza el objetivo de distribución de un instrumento dentro de su clase.
+        """
+        try:
+            # 1. Validar propiedad del portafolio
+            port_res = self.supabase.table('portafolios').select('id, user_id').eq('id', portfolio_id).execute()
+            if not port_res.data:
+                return {"success": False, "error": "Portafolio no encontrado"}
+            if str(port_res.data[0]['user_id']) != str(user_id):
+                return {"success": False, "error": "Acceso no autorizado"}
+
+            # 2. Upsert del objetivo del instrumento
+            upsert_data = {
+                "portafolio_id": portfolio_id,
+                "seccion": seccion,
+                "ticker": ticker.upper(),
+                "porcentaje_objetivo": porcentaje_objetivo,
+                "updated_at": datetime_now_iso()
+            }
+            res = self.supabase.table('portafolio_instrumentos_objetivo').upsert(
+                upsert_data,
+                on_conflict='portafolio_id,ticker'
+            ).execute()
+            
+            return {"success": True, "message": "Objetivo del instrumento guardado correctamente."}
         except Exception as e:
             return {"success": False, "error": str(e)}
 

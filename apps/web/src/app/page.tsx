@@ -38,7 +38,8 @@ import {
   Percent,
   Layers,
   Award,
-  Trash2
+  Trash2,
+  Edit2
 } from "lucide-react";
 import { 
   PieChart,
@@ -135,6 +136,11 @@ export default function DashboardPage() {
   const [buyError, setBuyError] = useState<string | null>(null);
   const [buyEtfInfo, setBuyEtfInfo] = useState<any>(null);
   const [loadingBuyEtf, setLoadingBuyEtf] = useState(false);
+
+  // Estados para objetivo de instrumento y edición en caliente
+  const [porcentajeObjetivoInstrumento, setPorcentajeObjetivoInstrumento] = useState("");
+  const [editingTicker, setEditingTicker] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
 
   // Lista estática de ETFs populares para comparación rápida
   const [showPopularETFs, setShowPopularETFs] = useState(true);
@@ -352,6 +358,7 @@ export default function DashboardPage() {
     setPorcentajeInversion("");
     setBuyError(null);
     setBuyEtfInfo(null);
+    setPorcentajeObjetivoInstrumento("");
   };
 
   const handleOpenBuyModal = () => {
@@ -405,13 +412,15 @@ export default function DashboardPage() {
       const cantFloat = parseFloat(cantidad) || 0;
       const customPrice = parseFloat(precioUnitario) || undefined;
       
+      const objVal = porcentajeObjetivoInstrumento ? parseFloat(porcentajeObjetivoInstrumento) : undefined;
       const result = await backendApi.simulateBuy(
         selectedPortfolioId,
         userId,
         ticker.toUpperCase(),
         cantFloat,
         seccion,
-        customPrice
+        customPrice,
+        objVal
       );
 
       if (result.success) {
@@ -439,11 +448,40 @@ export default function DashboardPage() {
     }
   };
 
+  const handleSaveInstrumentTarget = async (ticker: string, seccion: string) => {
+    if (!selectedPortfolioId || !userId) return;
+    try {
+      const val = parseFloat(editValue);
+      if (isNaN(val) || val < 0 || val > 100) {
+        alert("El porcentaje debe ser un número entre 0 y 100.");
+        setEditingTicker(null);
+        return;
+      }
+      
+      await backendApi.saveInstrumentTarget(selectedPortfolioId, userId, seccion, ticker, val);
+      setEditingTicker(null);
+      await refreshPortfolioStatus(selectedPortfolioId, userId);
+    } catch (err: any) {
+      console.error("Error al guardar objetivo de instrumento:", err);
+      alert("Error al guardar objetivo: " + err.message);
+      setEditingTicker(null);
+    }
+  };
+
   const handleTickerBlur = async () => {
     if (!ticker.trim()) return;
     setLoadingBuyEtf(true);
     setBuyError(null);
     try {
+      // Autofill from existing holdings if present
+      const existingHolding = status?.holdings?.find((h: any) => h.ticker === ticker.trim().toUpperCase());
+      if (existingHolding) {
+        setSeccion(existingHolding.seccion);
+        if (existingHolding.porcentaje_objetivo_clase !== undefined && existingHolding.porcentaje_objetivo_clase !== null) {
+          setPorcentajeObjetivoInstrumento(existingHolding.porcentaje_objetivo_clase.toString());
+        }
+      }
+
       // 1. Obtener Categoría
       const res = await backendApi.getTickerCategory(ticker.trim());
       let cat = "General";
@@ -497,7 +535,7 @@ export default function DashboardPage() {
           fee: d.comision || "N/A",
           retorno5y: d.retorno_5y || "N/A",
           cat: cat,
-          clase: seccion || "Sin Clase",
+          clase: existingHolding?.seccion || seccion || "Sin Clase",
           tipo: instType
         });
       } else {
@@ -905,32 +943,91 @@ export default function DashboardPage() {
                               </td>
                             </tr>
                             
-                            {isExpanded && seccionHoldings.length > 0 && (
-                              <tr className="bg-gray-900/30">
-                                <td colSpan={5} className="p-0 border-t border-gray-800/30">
-                                  <div className="pl-12 pr-4 py-3 bg-gray-950/20">
-                                    <table className="w-full text-left">
-                                      <tbody className="divide-y divide-gray-800/20">
-                                        {seccionHoldings.map((h: any) => (
-                                          <tr key={h.ticker} className="text-[11px]">
-                                            <td className="py-2 flex items-center gap-2">
-                                              <span className="font-bold text-amber-500">{h.ticker}</span>
-                                              <span className="text-gray-500 truncate max-w-[150px]">{h.nombre}</span>
-                                            </td>
-                                            <td className="py-2 text-right font-mono text-gray-400">
-                                              {h.cantidad.toFixed(4)} tit.
-                                            </td>
-                                            <td className="py-2 text-right font-mono text-white">
-                                              ${h.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}
-                                            </td>
-                                          </tr>
-                                        ))}
-                                      </tbody>
-                                    </table>
+                            {isExpanded && seccionHoldings.length > 0 && seccionHoldings.map((h: any) => (
+                              <tr key={h.ticker} className="bg-gray-900/25 hover:bg-gray-800/10 transition-colors border-t border-gray-800/20">
+                                {/* Col 1: Instrument Details */}
+                                <td className="py-2.5 pl-12">
+                                  <div className="flex items-center gap-2">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                                    <span className="font-bold text-amber-500 font-mono shrink-0">{h.ticker}</span>
+                                    <span className="text-gray-400 truncate max-w-[150px] [data-theme='light']:text-gray-600 font-medium" title={h.nombre}>
+                                      {h.nombre}
+                                    </span>
+                                    <span className="text-[10px] text-gray-500 font-mono ml-auto">
+                                      ({h.cantidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })} tit.)
+                                    </span>
                                   </div>
                                 </td>
+                                
+                                {/* Col 2: Target % (Editable) */}
+                                <td className="py-2.5 text-center font-mono select-none">
+                                  {editingTicker === h.ticker ? (
+                                    <input
+                                      type="number"
+                                      value={editValue}
+                                      onChange={(e) => setEditValue(e.target.value)}
+                                      onBlur={() => handleSaveInstrumentTarget(h.ticker, sec.nombre_seccion)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleSaveInstrumentTarget(h.ticker, sec.nombre_seccion);
+                                        if (e.key === 'Escape') setEditingTicker(null);
+                                      }}
+                                      className="w-16 bg-[#111827] border border-amber-500 text-center font-mono text-white text-xs rounded py-0.5 focus:outline-none"
+                                      autoFocus
+                                      step="0.1"
+                                      min="0"
+                                      max="100"
+                                    />
+                                  ) : (
+                                    <div 
+                                      className="group inline-flex items-center justify-center gap-1 cursor-pointer hover:bg-gray-800/60 px-2 py-0.5 rounded transition"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingTicker(h.ticker);
+                                        setEditValue((h.porcentaje_objetivo_clase || 0).toString());
+                                      }}
+                                    >
+                                      <span className="font-mono text-gray-300 font-bold">{(h.porcentaje_objetivo_clase || 0).toFixed(1)}%</span>
+                                      <Edit2 className="h-3 w-3 text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                  )}
+                                  <div className="text-[9px] text-gray-500 mt-0.5">({(h.porcentaje_objetivo_total || 0).toFixed(2)}% total)</div>
+                                </td>
+
+                                {/* Col 3: Actual % */}
+                                <td className="py-2.5 text-center font-mono">
+                                  <div className="text-gray-300">{(h.porcentaje_real_clase || 0).toFixed(1)}%</div>
+                                  <div className="text-[9px] text-gray-500 mt-0.5">({(h.porcentaje_real_total || 0).toFixed(2)}% total)</div>
+                                </td>
+
+                                {/* Col 4: Inversión Actual */}
+                                <td className="py-2.5 text-right font-mono text-white [data-theme='light']:text-gray-900">
+                                  ${h.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}
+                                </td>
+
+                                {/* Col 5: Diferencia */}
+                                <td className={`py-2.5 text-right font-mono font-bold ${h.desviacion_valor >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                                  {h.desviacion_valor >= 0 ? "+" : ""}${h.desviacion_valor.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}
+                                </td>
                               </tr>
-                            )}
+                            ))}
+                            
+                            {/* Alerta si la suma de los objetivos de la clase no es 100% */}
+                            {isExpanded && seccionHoldings.length > 0 && (() => {
+                              const sumTargets = seccionHoldings.reduce((sum: number, sh: any) => sum + (sh.porcentaje_objetivo_clase || 0), 0);
+                              if (Math.abs(sumTargets - 100.0) > 0.05) {
+                                return (
+                                  <tr className="bg-amber-950/10">
+                                    <td colSpan={5} className="py-2 pl-12 pr-4 text-[10px] text-amber-500 font-semibold border-t border-gray-800/30">
+                                      <div className="flex items-center gap-1.5">
+                                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                                        <span>El objetivo de los instrumentos en esta clase suma {sumTargets.toFixed(1)}% (debería ser 100.0%).</span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              }
+                              return null;
+                            })()}
                             
                             {isExpanded && seccionHoldings.length === 0 && (
                               <tr className="bg-gray-900/30">
@@ -1759,14 +1856,14 @@ export default function DashboardPage() {
                         <option value="ETFs">ETFs</option>
                       </select>
                     </div>
-                    <div className="space-y-1 col-span-2">
+                    <div className="space-y-1">
                       <label className="text-xs font-bold text-amber-500 uppercase tracking-wide">Clase de Activo (Tu Estrategia)</label>
                       <input
                         type="text"
                         value={seccion}
                         onChange={(e) => setSeccion(e.target.value)}
                         list="secciones-datalist"
-                        placeholder="Ej: Acciones EE.UU., Renta Fija, Cripto..."
+                        placeholder="Ej: Acciones EE.UU., Renta Fija..."
                         className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 transition"
                         required
                       />
@@ -1775,6 +1872,17 @@ export default function DashboardPage() {
                           <option key={sec.nombre_seccion} value={sec.nombre_seccion} />
                         ))}
                       </datalist>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-amber-500 uppercase tracking-wide">Objetivo Instrumento (%)</label>
+                      <input
+                        type="number"
+                        value={porcentajeObjetivoInstrumento}
+                        onChange={(e) => setPorcentajeObjetivoInstrumento(e.target.value)}
+                        placeholder="e.g. 45.0"
+                        className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
+                        min="0" max="100" step="0.1"
+                      />
                     </div>
                   </div>
 

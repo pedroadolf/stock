@@ -136,7 +136,8 @@ export const backendApi = {
     ticker: string,
     cantidad: number,
     seccion: string,
-    valorActualManual?: number
+    valorActualManual?: number,
+    porcentajeObjetivoInstrumento?: number
   ): Promise<{
     success: boolean;
     operacion_id: string;
@@ -155,6 +156,7 @@ export const backendApi = {
         cantidad,
         seccion,
         valor_actual_manual: valorActualManual,
+        porcentaje_objetivo_instrumento: porcentajeObjetivoInstrumento,
       }),
     });
   },
@@ -260,6 +262,28 @@ export const backendApi = {
   async getTickerCategory(ticker: string): Promise<{ ticker: string; category: string; instrumentType: string }> {
     return fetchFromBackend(`/api/trades/ticker-category?ticker=${encodeURIComponent(ticker)}`, {
       method: 'GET',
+    });
+  },
+
+  /**
+   * Guarda o actualiza el objetivo de distribución de un instrumento dentro de su clase
+   */
+  async saveInstrumentTarget(
+    portfolioId: string,
+    userId: string,
+    seccion: string,
+    ticker: string,
+    porcentajeObjetivo: number
+  ): Promise<{ success: boolean; message: string }> {
+    return fetchFromBackend('/api/trades/instrument-target', {
+      method: 'POST',
+      headers: { 'User-ID': userId },
+      body: JSON.stringify({
+        portfolio_id: portfolioId,
+        seccion,
+        ticker,
+        porcentaje_objetivo: porcentajeObjetivo,
+      }),
     });
   },
 };

@@ -16,6 +16,13 @@ class SimulateBuyRequest(BaseModel):
     cantidad: float
     seccion: str
     valor_actual_manual: Optional[float] = None
+    porcentaje_objetivo_instrumento: Optional[float] = None
+
+class InstrumentTargetRequest(BaseModel):
+    portfolio_id: str
+    seccion: str
+    ticker: str
+    porcentaje_objetivo: float
 
 class CalculateRebalanceRequest(BaseModel):
     portfolio_id: str
@@ -138,11 +145,39 @@ def simulate_buy_endpoint(
         ticker=payload.ticker,
         cantidad=payload.cantidad,
         seccion=payload.seccion,
-        valor_actual_manual=payload.valor_actual_manual
+        valor_actual_manual=payload.valor_actual_manual,
+        porcentaje_objetivo_instrumento=payload.porcentaje_objetivo_instrumento
     )
     
     if not result.get("success"):
         raise HTTPException(status_code=result.get("status_code", 400), detail=result.get("error"))
+        
+    return result
+
+
+@router.post("/instrument-target")
+def save_instrument_target_endpoint(
+    payload: InstrumentTargetRequest,
+    user_id: Optional[str] = Header(None, alias="User-ID", description="El ID del usuario propietario"),
+    supabase_client = Depends(get_supabase_client)
+):
+    """
+    Guarda o actualiza el objetivo de distribución de un instrumento dentro de su clase.
+    """
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Header 'User-ID' es requerido para aislamiento de inquilinos")
+        
+    handler = MCPRequestHandler(supabase_client)
+    result = handler.save_instrument_target(
+        portfolio_id=payload.portfolio_id,
+        user_id=user_id,
+        seccion=payload.seccion,
+        ticker=payload.ticker,
+        porcentaje_objetivo=payload.porcentaje_objetivo
+    )
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error"))
         
     return result
 
