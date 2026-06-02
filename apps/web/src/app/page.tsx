@@ -134,6 +134,8 @@ export default function DashboardPage() {
   const [porcentajeInversion, setPorcentajeInversion] = useState("");
   const [buying, setBuying] = useState(false);
   const [buyError, setBuyError] = useState<string | null>(null);
+  const [buyEtfInfo, setBuyEtfInfo] = useState<any>(null);
+  const [loadingBuyEtf, setLoadingBuyEtf] = useState(false);
 
   // Lista estática de ETFs populares para comparación rápida
   const [showPopularETFs, setShowPopularETFs] = useState(true);
@@ -351,6 +353,62 @@ export default function DashboardPage() {
     setMontoUSD("");
     setPorcentajeInversion("");
     setBuyError(null);
+    setBuyEtfInfo(null);
+  };
+
+  // Datos del portafolio propuesto para quick-assign en modal de compra
+  const PORTFOLIO_ETF_PLAN = [
+    { ticker: "VTI",  pct: 45, desc: "Vanguard Total Market — mercado total EE.UU., ~3,500 empresas. Base sólida y de bajo costo.",            fee: "0.03%", cat: "Renta Variable", clase: "Núcleo EE.UU.",      tipo: "ETFs", retorno5y: "15.7%" },
+    { ticker: "VXUS", pct: 20, desc: "Vanguard Total International — mercados desarrollados y emergentes fuera de EE.UU.",                     fee: "0.05%", cat: "Internacional",   clase: "Internacional",    tipo: "ETFs", retorno5y: "6.2%" },
+    { ticker: "AVUV", pct: 15, desc: "Avantis U.S. Small Cap Value — small-cap con sesgo calidad. Prima de riesgo documentada a largo plazo.", fee: "0.25%", cat: "Factor",          clase: "Factor Value",     tipo: "ETFs", retorno5y: "12.1%" },
+    { ticker: "VGT",  pct: 10, desc: "Vanguard Information Technology — tecnología amplia. Mismo sesgo growth sin concentración Nasdaq-100.",  fee: "0.09%", cat: "Tecnología",      clase: "Sector Tech",      tipo: "ETFs", retorno5y: "19.9%" },
+    { ticker: "ICLN", pct: 5,  desc: "iShares Global Clean Energy — solar, eólica, hidrógeno. Alta volatilidad, tesis de crecimiento 10-15 años.", fee: "0.39%", cat: "Energía limpia",  clase: "Sector Clean",     tipo: "ETFs", retorno5y: "-3.4%" },
+    { ticker: "FHLC", pct: 5,  desc: "Fidelity Health Care — farmacéuticas, biotech, dispositivos médicos. Sector defensivo con crecimiento estructural.", fee: "0.08%", cat: "Salud",      clase: "Sector Health",    tipo: "ETFs", retorno5y: "10.8%" },
+  ];
+
+  // Selección rápida de ETF en el modal de compra
+  const handleQuickSelectEtf = async (etf: typeof PORTFOLIO_ETF_PLAN[0], totalInversion: number) => {
+    const monto = (etf.pct / 100) * totalInversion;
+    setTicker(etf.ticker);
+    setMontoUSD(monto.toFixed(2));
+    setInstrumentType(etf.tipo);
+    setBuyEtfInfo(etf);
+    setBuyError(null);
+    // Autoasignar sección si hay solo una o buscar match
+    if (status?.secciones && status.secciones.length > 0) {
+      const match = status.secciones.find((s: any) =>
+        s.nombre_seccion.toLowerCase().includes(etf.cat.toLowerCase()) ||
+        s.nombre_seccion.toLowerCase().includes(etf.clase.toLowerCase().split(' ')[0])
+      );
+      setSeccion(match ? match.nombre_seccion : status.secciones[0].nombre_seccion);
+    }
+    // Obtener precio en vivo
+    setLoadingBuyEtf(true);
+    try {
+      const res = await backendApi.getTickerCategory(etf.ticker);
+      if (res) {
+        if (res.category && res.category !== "General") setYahooCategory(res.category);
+        if (res.fundFamily) setYahooFundFamily(res.fundFamily);
+        if (res.instrumentType) setInstrumentType(res.instrumentType);
+      }
+      const resPrice = await backendApi.getInstrumentDetails(etf.ticker);
+      if (resPrice?.success && resPrice.data?.precio_actual_vivo) {
+        const price = resPrice.data.precio_actual_vivo;
+        setLivePrice(price);
+        setIsManualAsset(false);
+        if (monto > 0 && price > 0) {
+          setCantidad((monto / price).toFixed(4));
+        }
+      } else {
+        setLivePrice(null);
+        setIsManualAsset(true);
+      }
+    } catch (_) {
+      setLivePrice(null);
+      setIsManualAsset(true);
+    } finally {
+      setLoadingBuyEtf(false);
+    }
   };
 
   const handleOpenBuyModal = () => {
@@ -1507,197 +1565,339 @@ export default function DashboardPage() {
 
       {/* ─── REGISTRAR COMPRA MODAL ────────────────────────────────────────── */}
       {showBuyModal && (
-        <div className="fixed inset-0 bg-[#000000]/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-gray-800 rounded-3xl max-w-md w-full p-6 space-y-6 shadow-2xl relative">
-            <div>
-              <h3 className="text-lg font-extrabold font-plus-jakarta text-white">Registrar Inversión</h3>
-              <p className="text-xs text-gray-400 mt-1">Registra la compra simulada de un activo para actualizar tu portafolio.</p>
+        <div className="fixed inset-0 bg-[#000000]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-[#0d1117] border border-gray-800 rounded-3xl max-w-3xl w-full shadow-2xl relative my-4">
+
+            {/* ── Header ── */}
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-800">
+              <div>
+                <h3 className="text-lg font-extrabold text-white">Registrar Compra</h3>
+                <p className="text-[11px] text-gray-500 mt-0.5">Selecciona un ETF del plan o escribe el ticker manualmente</p>
+              </div>
+              <button onClick={resetBuyModal} className="text-gray-500 hover:text-white transition text-xl font-bold leading-none cursor-pointer px-2">&times;</button>
             </div>
 
-            <form onSubmit={handleRegisterBuy} className="space-y-4">
-              
-              <div className="space-y-1">
-                <div className="flex justify-between items-center">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Símbolo (Ticker)</label>
-                  <a 
-                    href="https://finance.yahoo.com/lookup" 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    className="text-[10px] text-amber-500 hover:underline font-bold"
-                  >
-                    Buscar símbolo ↗
-                  </a>
+            <div className="p-6 space-y-6">
+
+              {/* ── SECCIÓN 1: Plan de Portafolio Quick-Assign ── */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Plan de Portafolio — Selección Rápida</h4>
+                  <span className="text-[9px] text-gray-600 font-bold">Capital: ${(status?.total_value || 0).toLocaleString(undefined, {minimumFractionDigits:2})} {status?.moneda || 'USD'}</span>
                 </div>
-                <input 
-                  type="text"
-                  value={ticker}
-                  onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                  onBlur={handleTickerBlur}
-                  placeholder="Ej: VOO, NAFTRAC, VTI, CETES..."
-                  className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs font-mono text-white placeholder-gray-700 focus:outline-none focus:border-amber-500 transition"
-                  required
-                />
+
+                {/* Tabla ETFs del plan */}
+                <div className="overflow-hidden rounded-2xl border border-gray-800">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-gray-900/60 text-[9px] font-black uppercase tracking-widest text-gray-500">
+                        <th className="px-4 py-2.5">ETF</th>
+                        <th className="px-4 py-2.5">Categoría</th>
+                        <th className="px-4 py-2.5">Clase</th>
+                        <th className="px-4 py-2.5">Tipo</th>
+                        <th className="px-4 py-2.5 text-right">%</th>
+                        <th className="px-4 py-2.5 text-right">Monto</th>
+                        <th className="px-4 py-2.5 text-center">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800/50">
+                      {PORTFOLIO_ETF_PLAN.map((etf) => {
+                        const monto = ((etf.pct / 100) * (status?.total_value || 3500));
+                        const isSelected = ticker === etf.ticker;
+                        return (
+                          <tr
+                            key={etf.ticker}
+                            className={`text-xs transition cursor-pointer ${
+                              isSelected
+                                ? 'bg-amber-500/10 border-l-2 border-amber-500'
+                                : 'hover:bg-gray-800/30'
+                            }`}
+                            onClick={() => handleQuickSelectEtf(etf, status?.total_value || 3500)}
+                          >
+                            <td className="px-4 py-3">
+                              <span className={`font-black font-mono text-sm ${ isSelected ? 'text-amber-400' : 'text-white' }`}>{etf.ticker}</span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-full text-[9px] font-bold">{etf.cat}</span>
+                            </td>
+                            <td className="px-4 py-3 text-gray-400 font-medium">{etf.clase}</td>
+                            <td className="px-4 py-3">
+                              <span className="px-2 py-0.5 bg-gray-800 text-gray-400 rounded text-[9px] font-bold">{etf.tipo}</span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className="font-mono font-bold text-emerald-400">{etf.pct}%</span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className="font-mono font-black text-white">${monto.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0})} <span className="text-gray-500 font-normal">USD</span></span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {loadingBuyEtf && isSelected
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500 mx-auto" />
+                                : <span className={`text-[9px] font-black uppercase ${ isSelected ? 'text-amber-400' : 'text-gray-600 group-hover:text-gray-400' }`}>
+                                    {isSelected ? '✓ Seleccionado' : 'Seleccionar'}
+                                  </span>
+                              }
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    {/* Fila total costo ponderado */}
+                    <tfoot>
+                      <tr className="bg-gray-900/80 text-[9px] text-gray-500 font-black uppercase tracking-wider border-t border-gray-700">
+                        <td colSpan={4} className="px-4 py-2.5">Costo total ponderado</td>
+                        <td className="px-4 py-2.5 text-right text-white">100%</td>
+                        <td className="px-4 py-2.5 text-right font-mono text-amber-400">${(status?.total_value || 3500).toLocaleString(undefined, {minimumFractionDigits:0})} USD</td>
+                        <td className="px-4 py-2.5 text-center font-mono text-emerald-400">0.100%</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               </div>
 
-              <div className="bg-gray-900/40 border border-gray-800 rounded-xl p-4 space-y-4">
-                <div className="flex justify-between items-center pb-2 border-b border-gray-800">
-                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">Calculadora de Inversión</span>
-                  <span className="text-xs text-gray-500">
-                    Capital Total: <strong className="text-white">${status?.total_value?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'} {status?.moneda || 'USD'}</strong>
-                  </span>
-                </div>
-                
-                {/* Switch Manual y Precio Unitario */}
-                <div className="flex flex-col gap-2 bg-[#0d121f] p-3 rounded-xl border border-gray-800">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs text-gray-400 font-bold cursor-pointer select-none flex items-center gap-2">
-                      <input 
-                        type="checkbox" 
-                        checked={isManualAsset} 
-                        onChange={(e) => handleManualAssetToggle(e.target.checked)}
-                        className="rounded border-gray-800 text-amber-500 focus:ring-amber-500/20 bg-gray-900 cursor-pointer"
-                      />
-                      Activo Manual (Sin cotización en Yahoo)
-                    </label>
+              {/* ── SECCIÓN 2: Panel del ETF seleccionado ── */}
+              {buyEtfInfo && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Ficha del ETF Seleccionado</h4>
                   </div>
-                  
-                  {isManualAsset && (
-                    <div className="space-y-1 mt-1.5 border-t border-gray-800/40 pt-2">
-                      <label className="text-[10px] font-bold text-amber-500 uppercase tracking-wide">Precio Unitario ({status?.moneda || 'USD'})</label>
-                      <input 
-                        type="number"
-                        value={manualPriceInput}
-                        onChange={(e) => handleManualPriceChange(e.target.value)}
-                        placeholder="Ingresa el precio unitario..."
-                        className="w-full bg-[#111827] border border-amber-500/30 rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
-                        min="0"
-                        step="any"
-                        required={isManualAsset}
-                      />
+
+                  {/* Descripción + meta */}
+                  <div className="bg-gray-900/60 border border-gray-800 rounded-2xl p-4 space-y-4">
+                    <div className="flex items-start gap-3">
+                      <div className="shrink-0 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                        <span className="font-black font-mono text-amber-400 text-base">{buyEtfInfo.ticker}</span>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-300 leading-relaxed">{buyEtfInfo.desc}</p>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          <span className="px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-full text-[9px] font-bold">{buyEtfInfo.cat}</span>
+                          <span className="px-2 py-0.5 bg-gray-800 text-gray-400 rounded-full text-[9px] font-bold">{buyEtfInfo.clase}</span>
+                          <span className="px-2 py-0.5 bg-gray-800 text-gray-400 rounded-full text-[9px] font-bold">{buyEtfInfo.tipo}</span>
+                        </div>
+                      </div>
                     </div>
-                  )}
 
-                  {!isManualAsset && livePrice && (
-                    <div className="text-[10px] text-emerald-500 font-mono text-right mt-1 border-t border-gray-800/40 pt-2">
-                      Precio en Vivo ({status?.moneda || 'USD'}): ${livePrice.toFixed(2)}
+                    {/* Cajas de datos clave */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {/* Comisión */}
+                      <div className="bg-gray-950/60 border border-gray-800 rounded-xl p-3 text-center space-y-1">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">Comisión (TER)</span>
+                        <span className="text-lg font-black font-mono text-white block">{buyEtfInfo.fee}</span>
+                        <span className="text-[9px] text-gray-600">anual</span>
+                      </div>
+                      {/* Costo ponderado */}
+                      <div className="bg-gray-950/60 border border-gray-800 rounded-xl p-3 text-center space-y-1">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">Peso en Portafolio</span>
+                        <span className="text-lg font-black font-mono text-amber-400 block">{buyEtfInfo.pct}%</span>
+                        <span className="text-[9px] text-gray-600">del total</span>
+                      </div>
+                      {/* Monto asignado */}
+                      <div className="bg-gray-950/60 border border-gray-800 rounded-xl p-3 text-center space-y-1">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">Monto Asignado</span>
+                        <span className="text-base font-black font-mono text-emerald-400 block">${((buyEtfInfo.pct / 100) * (status?.total_value || 3500)).toLocaleString(undefined, {minimumFractionDigits:0})} <span className="text-[10px] text-gray-500">USD</span></span>
+                        <span className="text-[9px] text-gray-600">inversión inicial</span>
+                      </div>
+                      {/* Rendimiento histórico 5y */}
+                      <div className="bg-gray-950/60 border border-gray-800 rounded-xl p-3 text-center space-y-1">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">Rend. Histórico</span>
+                        <span className={`text-lg font-black font-mono block ${ parseFloat(buyEtfInfo.retorno5y) >= 0 ? 'text-emerald-400' : 'text-red-400' }`}>{buyEtfInfo.retorno5y}</span>
+                        <span className="text-[9px] text-gray-600">promedio 5 años</span>
+                      </div>
                     </div>
-                  )}
-                </div>
-                
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Monto ({status?.moneda || 'USD'})</label>
-                    <input 
-                      type="number"
-                      value={montoUSD}
-                      onChange={(e) => handleMontoChange(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
-                      min="0"
-                      step="any"
-                    />
+
+                    {/* Proyección: Inversión inicial + aportaciones mensuales */}
+                    {(() => {
+                      const inicial = (buyEtfInfo.pct / 100) * (status?.total_value || 3500);
+                      const mensual = (buyEtfInfo.pct / 100) * 50; // $50 mensuales del plan
+                      const tasa = parseFloat(buyEtfInfo.retorno5y) / 100 || 0;
+                      const tasaMensual = tasa / 12;
+                      const meses = 120; // 10 años
+                      const futuroInicial = inicial * Math.pow(1 + tasa, 10);
+                      const futuroAportaciones = mensual > 0 && tasaMensual > 0
+                        ? mensual * ((Math.pow(1 + tasaMensual, meses) - 1) / tasaMensual)
+                        : mensual * meses;
+                      const totalFuturo = futuroInicial + futuroAportaciones;
+                      const totalInvertido = inicial + (mensual * meses);
+                      const ganancia = totalFuturo - totalInvertido;
+                      return (
+                        <div className="border-t border-gray-800/60 pt-3 space-y-2">
+                          <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">Proyección a 10 años (basada en rendimiento histórico)</span>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="bg-gray-950/40 rounded-xl p-3 border border-gray-800/50 text-center">
+                              <span className="text-[9px] text-gray-500 block font-bold uppercase">Invertido Total</span>
+                              <span className="font-mono font-black text-sm text-gray-300 block mt-1">${totalInvertido.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0})}</span>
+                              <span className="text-[9px] text-gray-600">${inicial.toFixed(0)} inicial + ${(mensual*meses).toFixed(0)} aportes</span>
+                            </div>
+                            <div className="bg-emerald-950/20 rounded-xl p-3 border border-emerald-800/30 text-center">
+                              <span className="text-[9px] text-gray-500 block font-bold uppercase">Rendimiento</span>
+                              <span className="font-mono font-black text-sm text-emerald-400 block mt-1">+${ganancia.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0})}</span>
+                              <span className="text-[9px] text-emerald-600">{buyEtfInfo.retorno5y} / año (est.)</span>
+                            </div>
+                            <div className="bg-amber-950/20 rounded-xl p-3 border border-amber-800/30 text-center">
+                              <span className="text-[9px] text-gray-500 block font-bold uppercase">Total Proyectado</span>
+                              <span className="font-mono font-black text-sm text-amber-400 block mt-1">${totalFuturo.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0})}</span>
+                              <span className="text-[9px] text-amber-700">en 10 años</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Porcentaje (%)</label>
-                    <input 
-                      type="number"
-                      value={porcentajeInversion}
-                      onChange={(e) => handlePorcentajeChange(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
-                      min="0"
-                      step="any"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-amber-500 uppercase tracking-wide">Títulos (Cant.)</label>
-                    <input 
-                      type="number"
-                      value={cantidad}
-                      onChange={(e) => handleCantidadChange(e.target.value)}
-                      placeholder="1"
-                      className="w-full bg-gray-950 border border-amber-500/50 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
-                      min="0.0001"
-                      step="any"
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Categoría de Mercado (Yahoo)</label>
-                  <input 
-                    type="text"
-                    value={yahooCategory ? `${yahooCategory}${yahooFundFamily !== "N/A" && yahooFundFamily ? ` | ${yahooFundFamily}` : ""}` : "Buscando..."}
-                    className="w-full bg-gray-900/50 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-gray-500 cursor-not-allowed"
-                    readOnly
-                    disabled
-                  />
-                </div>
-
-                <div className="space-y-1 col-span-2">
-                  <label className="text-xs font-bold text-amber-500 uppercase tracking-wide">Clase de Activo (Tu Estrategia)</label>
-                  <select 
-                    value={seccion}
-                    onChange={(e) => setSeccion(e.target.value)}
-                    className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 transition cursor-pointer h-[38px]"
-                    required
-                  >
-                    <option value="" disabled>Selecciona una meta...</option>
-                    {(status?.secciones || []).map((sec: any) => (
-                      <option key={sec.nombre_seccion} value={sec.nombre_seccion}>
-                        {sec.nombre_seccion}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Tipo de Instrumento</label>
-                <select 
-                  value={instrumentType}
-                  onChange={(e) => setInstrumentType(e.target.value)}
-                  className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 transition cursor-pointer"
-                  required
-                >
-                  <option value="" disabled>Seleccionar...</option>
-                  <option value="Stocks">Stocks</option>
-                  <option value="Crypto">Crypto</option>
-                  <option value="Treasury bonds">Treasury bonds</option>
-                  <option value="Sectors">Sectors</option>
-                  <option value="ETFs">ETFs</option>
-                </select>
-              </div>
-
-              {buyError && (
-                <div className="p-3 bg-red-950/20 border border-red-800/30 text-red-200 rounded-xl text-xs flex gap-2">
-                  <AlertTriangle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
-                  <span>{buyError}</span>
                 </div>
               )}
 
-              <div className="flex justify-end gap-3 pt-2">
-                <button 
-                  type="button" 
-                  onClick={resetBuyModal}
-                  className="px-4 py-2 border border-gray-800 text-gray-400 hover:text-white rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit" 
-                  disabled={buying}
-                  className="gostock-btn-primary py-2 px-4 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
-                >
-                  {buying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                  Registrar
-                </button>
+              {/* ── SECCIÓN 3: Formulario de Compra ── */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-500"></span>
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Detalles de la Operación</h4>
+                </div>
+
+                <form onSubmit={handleRegisterBuy} className="space-y-4">
+                  {/* Ticker manual */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Símbolo (Ticker)</label>
+                      <a href="https://finance.yahoo.com/lookup" target="_blank" rel="noopener noreferrer" className="text-[10px] text-amber-500 hover:underline font-bold">
+                        Buscar símbolo ↗
+                      </a>
+                    </div>
+                    <input
+                      type="text"
+                      value={ticker}
+                      onChange={(e) => { setTicker(e.target.value.toUpperCase()); setBuyEtfInfo(null); }}
+                      onBlur={handleTickerBlur}
+                      placeholder="Ej: VOO, NAFTRAC, VTI, CETES..."
+                      className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs font-mono text-white placeholder-gray-700 focus:outline-none focus:border-amber-500 transition"
+                      required
+                    />
+                  </div>
+
+                  {/* Calculadora */}
+                  <div className="bg-gray-900/40 border border-gray-800 rounded-xl p-4 space-y-4">
+                    <div className="flex justify-between items-center pb-2 border-b border-gray-800">
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">Calculadora de Inversión</span>
+                      <span className="text-xs text-gray-500">
+                        Capital Total: <strong className="text-white">${status?.total_value?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'} {status?.moneda || 'USD'}</strong>
+                      </span>
+                    </div>
+
+                    {/* Switch manual + precio en vivo */}
+                    <div className="flex flex-col gap-2 bg-[#0d121f] p-3 rounded-xl border border-gray-800">
+                      <label className="text-xs text-gray-400 font-bold cursor-pointer select-none flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={isManualAsset}
+                          onChange={(e) => handleManualAssetToggle(e.target.checked)}
+                          className="rounded border-gray-800 text-amber-500 focus:ring-amber-500/20 bg-gray-900 cursor-pointer"
+                        />
+                        Activo Manual (Sin cotización en Yahoo)
+                      </label>
+                      {isManualAsset && (
+                        <div className="space-y-1 mt-1.5 border-t border-gray-800/40 pt-2">
+                          <label className="text-[10px] font-bold text-amber-500 uppercase tracking-wide">Precio Unitario ({status?.moneda || 'USD'})</label>
+                          <input
+                            type="number"
+                            value={manualPriceInput}
+                            onChange={(e) => handleManualPriceChange(e.target.value)}
+                            placeholder="Ingresa el precio unitario..."
+                            className="w-full bg-[#111827] border border-amber-500/30 rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
+                            min="0" step="any" required={isManualAsset}
+                          />
+                        </div>
+                      )}
+                      {!isManualAsset && livePrice && (
+                        <div className="text-[10px] text-emerald-500 font-mono text-right mt-1 border-t border-gray-800/40 pt-2">
+                          ● Precio en Vivo ({status?.moneda || 'USD'}): ${livePrice.toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Monto | % | Títulos */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Monto ({status?.moneda || 'USD'})</label>
+                        <input type="number" value={montoUSD} onChange={(e) => handleMontoChange(e.target.value)} placeholder="0.00"
+                          className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
+                          min="0" step="any" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Porcentaje (%)</label>
+                        <input type="number" value={porcentajeInversion} onChange={(e) => handlePorcentajeChange(e.target.value)} placeholder="0.00"
+                          className="w-full bg-gray-950 border border-gray-800 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
+                          min="0" step="any" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-amber-500 uppercase tracking-wide">Títulos (Cant.)</label>
+                        <input type="number" value={cantidad} onChange={(e) => handleCantidadChange(e.target.value)} placeholder="1"
+                          className="w-full bg-gray-950 border border-amber-500/50 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
+                          min="0.0001" step="any" required />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Categoría, Clase, Tipo */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Categoría de Mercado</label>
+                      <input
+                        type="text"
+                        value={yahooCategory ? `${yahooCategory}${yahooFundFamily !== "N/A" && yahooFundFamily ? ` | ${yahooFundFamily}` : ""}` : "Buscando..."}
+                        className="w-full bg-gray-900/50 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-gray-500 cursor-not-allowed"
+                        readOnly disabled
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-gray-400 uppercase tracking-wide">Tipo de Instrumento</label>
+                      <select value={instrumentType} onChange={(e) => setInstrumentType(e.target.value)}
+                        className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 transition cursor-pointer"
+                        required>
+                        <option value="" disabled>Seleccionar...</option>
+                        <option value="Stocks">Stocks</option>
+                        <option value="Crypto">Crypto</option>
+                        <option value="Treasury bonds">Treasury bonds</option>
+                        <option value="Sectors">Sectors</option>
+                        <option value="ETFs">ETFs</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1 col-span-2">
+                      <label className="text-xs font-bold text-amber-500 uppercase tracking-wide">Clase de Activo (Tu Estrategia)</label>
+                      <select value={seccion} onChange={(e) => setSeccion(e.target.value)}
+                        className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 transition cursor-pointer"
+                        required>
+                        <option value="" disabled>Selecciona una meta...</option>
+                        {(status?.secciones || []).map((sec: any) => (
+                          <option key={sec.nombre_seccion} value={sec.nombre_seccion}>{sec.nombre_seccion}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {buyError && (
+                    <div className="p-3 bg-red-950/20 border border-red-800/30 text-red-200 rounded-xl text-xs flex gap-2">
+                      <AlertTriangle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                      <span>{buyError}</span>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-3 pt-2">
+                    <button type="button" onClick={resetBuyModal}
+                      className="px-4 py-2 border border-gray-800 text-gray-400 hover:text-white rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer">
+                      Cancelar
+                    </button>
+                    <button type="submit" disabled={buying}
+                      className="gostock-btn-primary py-2 px-6 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer">
+                      {buying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                      Registrar Compra
+                    </button>
+                  </div>
+                </form>
               </div>
 
-            </form>
+            </div>
           </div>
         </div>
       )}
