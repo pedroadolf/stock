@@ -1,6 +1,6 @@
 import { logger } from '../lib/logger';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000';
 
 /**
  * Helper genérico para realizar peticiones fetch al Backend con cabeceras estándar
