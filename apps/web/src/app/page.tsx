@@ -122,14 +122,13 @@ export default function DashboardPage() {
   // Modal / Formulario de Compra Manual
   const [showBuyModal, setShowBuyModal] = useState(false);
   const [ticker, setTicker] = useState("");
+  const [precioUnitario, setPrecioUnitario] = useState("");
   const [cantidad, setCantidad] = useState("1");
   const [seccion, setSeccion] = useState("");
   const [yahooCategory, setYahooCategory] = useState("");
   const [yahooFundFamily, setYahooFundFamily] = useState("");
   const [instrumentType, setInstrumentType] = useState("");
   const [livePrice, setLivePrice] = useState<number | null>(null);
-  const [isManualAsset, setIsManualAsset] = useState(false);
-  const [manualPriceInput, setManualPriceInput] = useState("");
   const [montoUSD, setMontoUSD] = useState("");
   const [porcentajeInversion, setPorcentajeInversion] = useState("");
   const [buying, setBuying] = useState(false);
@@ -342,73 +341,17 @@ export default function DashboardPage() {
   const resetBuyModal = () => {
     setShowBuyModal(false);
     setTicker("");
+    setPrecioUnitario("");
     setCantidad("1");
     setSeccion("");
     setYahooCategory("");
     setYahooFundFamily("");
     setInstrumentType("");
     setLivePrice(null);
-    setIsManualAsset(false);
-    setManualPriceInput("");
     setMontoUSD("");
     setPorcentajeInversion("");
     setBuyError(null);
     setBuyEtfInfo(null);
-  };
-
-  // Datos del portafolio propuesto para quick-assign en modal de compra
-  const PORTFOLIO_ETF_PLAN = [
-    { ticker: "VTI",  pct: 45, desc: "Vanguard Total Market — mercado total EE.UU., ~3,500 empresas. Base sólida y de bajo costo.",            fee: "0.03%", cat: "Renta Variable", clase: "Núcleo EE.UU.",      tipo: "ETFs", retorno5y: "15.7%" },
-    { ticker: "VXUS", pct: 20, desc: "Vanguard Total International — mercados desarrollados y emergentes fuera de EE.UU.",                     fee: "0.05%", cat: "Internacional",   clase: "Internacional",    tipo: "ETFs", retorno5y: "6.2%" },
-    { ticker: "AVUV", pct: 15, desc: "Avantis U.S. Small Cap Value — small-cap con sesgo calidad. Prima de riesgo documentada a largo plazo.", fee: "0.25%", cat: "Factor",          clase: "Factor Value",     tipo: "ETFs", retorno5y: "12.1%" },
-    { ticker: "VGT",  pct: 10, desc: "Vanguard Information Technology — tecnología amplia. Mismo sesgo growth sin concentración Nasdaq-100.",  fee: "0.09%", cat: "Tecnología",      clase: "Sector Tech",      tipo: "ETFs", retorno5y: "19.9%" },
-    { ticker: "ICLN", pct: 5,  desc: "iShares Global Clean Energy — solar, eólica, hidrógeno. Alta volatilidad, tesis de crecimiento 10-15 años.", fee: "0.39%", cat: "Energía limpia",  clase: "Sector Clean",     tipo: "ETFs", retorno5y: "-3.4%" },
-    { ticker: "FHLC", pct: 5,  desc: "Fidelity Health Care — farmacéuticas, biotech, dispositivos médicos. Sector defensivo con crecimiento estructural.", fee: "0.08%", cat: "Salud",      clase: "Sector Health",    tipo: "ETFs", retorno5y: "10.8%" },
-  ];
-
-  // Selección rápida de ETF en el modal de compra
-  const handleQuickSelectEtf = async (etf: typeof PORTFOLIO_ETF_PLAN[0], totalInversion: number) => {
-    const monto = (etf.pct / 100) * totalInversion;
-    setTicker(etf.ticker);
-    setMontoUSD(monto.toFixed(2));
-    setInstrumentType(etf.tipo);
-    setBuyEtfInfo(etf);
-    setBuyError(null);
-    // Autoasignar sección si hay solo una o buscar match
-    if (status?.secciones && status.secciones.length > 0) {
-      const match = status.secciones.find((s: any) =>
-        s.nombre_seccion.toLowerCase().includes(etf.cat.toLowerCase()) ||
-        s.nombre_seccion.toLowerCase().includes(etf.clase.toLowerCase().split(' ')[0])
-      );
-      setSeccion(match ? match.nombre_seccion : status.secciones[0].nombre_seccion);
-    }
-    // Obtener precio en vivo
-    setLoadingBuyEtf(true);
-    try {
-      const res = await backendApi.getTickerCategory(etf.ticker);
-      if (res) {
-        if (res.category && res.category !== "General") setYahooCategory(res.category);
-        if (res.fundFamily) setYahooFundFamily(res.fundFamily);
-        if (res.instrumentType) setInstrumentType(res.instrumentType);
-      }
-      const resPrice = await backendApi.getInstrumentDetails(etf.ticker);
-      if (resPrice?.success && resPrice.data?.precio_actual_vivo) {
-        const price = resPrice.data.precio_actual_vivo;
-        setLivePrice(price);
-        setIsManualAsset(false);
-        if (monto > 0 && price > 0) {
-          setCantidad((monto / price).toFixed(4));
-        }
-      } else {
-        setLivePrice(null);
-        setIsManualAsset(true);
-      }
-    } catch (_) {
-      setLivePrice(null);
-      setIsManualAsset(true);
-    } finally {
-      setLoadingBuyEtf(false);
-    }
   };
 
   const handleOpenBuyModal = () => {
@@ -418,39 +361,28 @@ export default function DashboardPage() {
     setShowBuyModal(true);
   };
 
-  const handleManualAssetToggle = (checked: boolean) => {
-    setIsManualAsset(checked);
-    if (checked) {
-      setLivePrice(null);
-      setYahooCategory("Manual");
-      setYahooFundFamily("N/A");
-      setInstrumentType("Stocks");
-    } else {
-      if (ticker) {
-        handleTickerBlur();
-      }
-    }
-  };
-
-  const handleManualPriceChange = (val: string) => {
-    setManualPriceInput(val);
+  const handlePrecioUnitarioChange = (val: string) => {
+    setPrecioUnitario(val);
     const price = parseFloat(val) || 0;
-    if (!price) {
+    if (price <= 0) {
+      setCantidad("");
       setMontoUSD("");
       setPorcentajeInversion("");
       return;
     }
-    if (cantidad && !isNaN(parseFloat(cantidad))) {
+    // Si ya tenemos MontoUSD, recalculamos la cantidad de títulos
+    if (montoUSD && !isNaN(parseFloat(montoUSD))) {
+      const m = parseFloat(montoUSD);
+      setCantidad((m / price).toString());
+    } 
+    // Si no hay MontoUSD pero hay cantidad, recalculamos el monto
+    else if (cantidad && !isNaN(parseFloat(cantidad))) {
       const cant = parseFloat(cantidad);
       const m = cant * price;
       setMontoUSD(m.toFixed(2));
       if (status?.total_value && status.total_value > 0) {
         setPorcentajeInversion(((m / status.total_value) * 100).toFixed(2));
       }
-    } else if (montoUSD && !isNaN(parseFloat(montoUSD))) {
-      const m = parseFloat(montoUSD);
-      const cant = m / price;
-      setCantidad(cant.toString());
     }
   };
 
@@ -464,13 +396,14 @@ export default function DashboardPage() {
       return;
     }
     if (!seccion) {
-      setBuyError("Debes seleccionar una sección.");
+      setBuyError("Debes seleccionar una Clase de Activo.");
       return;
     }
 
     setBuying(true);
     try {
       const cantFloat = parseFloat(cantidad) || 0;
+      const customPrice = parseFloat(precioUnitario) || undefined;
       
       const result = await backendApi.simulateBuy(
         selectedPortfolioId,
@@ -478,7 +411,7 @@ export default function DashboardPage() {
         ticker.toUpperCase(),
         cantFloat,
         seccion,
-        isManualAsset ? (parseFloat(manualPriceInput) || undefined) : undefined
+        customPrice
       );
 
       if (result.success) {
@@ -508,63 +441,96 @@ export default function DashboardPage() {
 
   const handleTickerBlur = async () => {
     if (!ticker.trim()) return;
+    setLoadingBuyEtf(true);
+    setBuyError(null);
     try {
       // 1. Obtener Categoría
       const res = await backendApi.getTickerCategory(ticker.trim());
+      let cat = "General";
+      let instType = "Stocks";
+      let family = "N/A";
       if (res) {
-        if (res.category && res.category !== "General") setYahooCategory(res.category);
-        if (res.fundFamily) setYahooFundFamily(res.fundFamily);
-        if (res.instrumentType) setInstrumentType(res.instrumentType);
+        cat = res.category || "General";
+        family = res.fundFamily || "N/A";
+        instType = res.instrumentType || "Stocks";
+        
+        setYahooCategory(cat);
+        setYahooFundFamily(family);
+        setInstrumentType(instType);
       }
       
-      // 2. Obtener Precio en Vivo
+      // 2. Obtener Detalles y Precio en Vivo
       const resPrice = await backendApi.getInstrumentDetails(ticker.trim());
-      if (resPrice && resPrice.success && resPrice.data?.precio_actual_vivo) {
-        let price = resPrice.data.precio_actual_vivo;
+      if (resPrice && resPrice.success && resPrice.data) {
+        const d = resPrice.data;
+        let price = d.precio_actual_vivo || 0;
         const isMxn = status?.moneda === "MXN";
         const rate = status?.usd_mxn_rate || 18.00;
-        if (isMxn) {
+        if (isMxn && price > 0) {
           price = price * rate;
         }
-        setLivePrice(price);
-        setIsManualAsset(false);
         
-        // Recalcular montos si ya hay cantidad
-        if (cantidad && !isNaN(parseFloat(cantidad))) {
-          const val = parseFloat(cantidad);
-          const m = val * price;
-          setMontoUSD(m.toFixed(2));
-          if (status?.total_value && status.total_value > 0) {
-            setPorcentajeInversion(((m / status.total_value) * 100).toFixed(2));
+        setLivePrice(price > 0 ? price : null);
+        if (price > 0) {
+          setPrecioUnitario(price.toString());
+          // Recalcular montos si ya hay cantidad
+          if (cantidad && !isNaN(parseFloat(cantidad))) {
+            const val = parseFloat(cantidad);
+            const m = val * price;
+            setMontoUSD(m.toFixed(2));
+            if (status?.total_value && status.total_value > 0) {
+              setPorcentajeInversion(((m / status.total_value) * 100).toFixed(2));
+            }
+          } else if (montoUSD && !isNaN(parseFloat(montoUSD))) {
+            const m = parseFloat(montoUSD);
+            setCantidad((m / price).toString());
           }
+        } else {
+          setLivePrice(null);
+          setPrecioUnitario("");
         }
+
+        // Crear Ficha del ETF dinámica en tiempo real
+        setBuyEtfInfo({
+          ticker: d.ticker || ticker.trim().toUpperCase(),
+          desc: d.descripcion || d.nombre || `Detalles para ${ticker.trim().toUpperCase()}`,
+          fee: d.comision || "N/A",
+          retorno5y: d.retorno_5y || "N/A",
+          cat: cat,
+          clase: seccion || "Sin Clase",
+          tipo: instType
+        });
       } else {
         setLivePrice(null);
-        setIsManualAsset(true);
+        setPrecioUnitario("");
         setYahooCategory("Manual");
         setYahooFundFamily("N/A");
         setInstrumentType("Stocks");
+        setBuyEtfInfo(null);
       }
     } catch (err) {
       console.error("Error al obtener detalles del ticker", err);
       setLivePrice(null);
-      setIsManualAsset(true);
+      setPrecioUnitario("");
       setYahooCategory("Manual");
       setYahooFundFamily("N/A");
       setInstrumentType("Stocks");
+      setBuyEtfInfo(null);
+    } finally {
+      setLoadingBuyEtf(false);
     }
   };
 
   const handleCantidadChange = (val: string) => {
     setCantidad(val);
-    const activePrice = isManualAsset ? (parseFloat(manualPriceInput) || 0) : (livePrice || 0);
-    if (!val || isNaN(parseFloat(val)) || !activePrice) {
+    const price = parseFloat(precioUnitario) || 0;
+    if (!val || isNaN(parseFloat(val)) || price <= 0) {
       setMontoUSD("");
       setPorcentajeInversion("");
       return;
     }
     const cant = parseFloat(val);
-    const m = cant * activePrice;
+    const m = cant * price;
     setMontoUSD(m.toFixed(2));
     if (status?.total_value && status.total_value > 0) {
       setPorcentajeInversion(((m / status.total_value) * 100).toFixed(2));
@@ -575,15 +541,16 @@ export default function DashboardPage() {
 
   const handleMontoChange = (val: string) => {
     setMontoUSD(val);
-    const activePrice = isManualAsset ? (parseFloat(manualPriceInput) || 0) : (livePrice || 0);
-    if (!val || isNaN(parseFloat(val)) || !activePrice) {
+    const price = parseFloat(precioUnitario) || 0;
+    if (!val || isNaN(parseFloat(val))) {
       setCantidad("");
       setPorcentajeInversion("");
       return;
     }
     const m = parseFloat(val);
-    const cant = m / activePrice;
-    setCantidad(cant.toString());
+    if (price > 0) {
+      setCantidad((m / price).toString());
+    }
     if (status?.total_value && status.total_value > 0) {
       setPorcentajeInversion(((m / status.total_value) * 100).toFixed(2));
     } else {
@@ -593,8 +560,8 @@ export default function DashboardPage() {
 
   const handlePorcentajeChange = (val: string) => {
     setPorcentajeInversion(val);
-    const activePrice = isManualAsset ? (parseFloat(manualPriceInput) || 0) : (livePrice || 0);
-    if (!val || isNaN(parseFloat(val)) || !activePrice || !status?.total_value || status.total_value <= 0) {
+    const price = parseFloat(precioUnitario) || 0;
+    if (!val || isNaN(parseFloat(val)) || !price || !status?.total_value || status.total_value <= 0) {
       setCantidad("");
       setMontoUSD("");
       return;
@@ -602,8 +569,9 @@ export default function DashboardPage() {
     const p = parseFloat(val);
     const m = (p / 100) * status.total_value;
     setMontoUSD(m.toFixed(2));
-    const cant = m / activePrice;
-    setCantidad(cant.toString());
+    if (price > 0) {
+      setCantidad((m / price).toString());
+    }
   };
 
   // Ejecutar búsqueda de instrumento en pestaña 3
@@ -1573,89 +1541,12 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-800">
               <div>
                 <h3 className="text-lg font-extrabold text-white">Registrar Compra</h3>
-                <p className="text-[11px] text-gray-500 mt-0.5">Selecciona un ETF del plan o escribe el ticker manualmente</p>
+                <p className="text-[11px] text-gray-500 mt-0.5">Escribe el símbolo (ticker) del activo para iniciar el registro</p>
               </div>
               <button onClick={resetBuyModal} className="text-gray-500 hover:text-white transition text-xl font-bold leading-none cursor-pointer px-2">&times;</button>
             </div>
 
             <div className="p-6 space-y-6">
-
-              {/* ── SECCIÓN 1: Plan de Portafolio Quick-Assign ── */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-                  <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-400">Plan de Portafolio — Selección Rápida</h4>
-                  <span className="text-[9px] text-gray-600 font-bold">Capital: ${(status?.total_value || 0).toLocaleString(undefined, {minimumFractionDigits:2})} {status?.moneda || 'USD'}</span>
-                </div>
-
-                {/* Tabla ETFs del plan */}
-                <div className="overflow-hidden rounded-2xl border border-gray-800">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="bg-gray-900/60 text-[9px] font-black uppercase tracking-widest text-gray-500">
-                        <th className="px-4 py-2.5">ETF</th>
-                        <th className="px-4 py-2.5">Categoría</th>
-                        <th className="px-4 py-2.5">Clase</th>
-                        <th className="px-4 py-2.5">Tipo</th>
-                        <th className="px-4 py-2.5 text-right">%</th>
-                        <th className="px-4 py-2.5 text-right">Monto</th>
-                        <th className="px-4 py-2.5 text-center">Acción</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-800/50">
-                      {PORTFOLIO_ETF_PLAN.map((etf) => {
-                        const monto = ((etf.pct / 100) * (status?.total_value || 3500));
-                        const isSelected = ticker === etf.ticker;
-                        return (
-                          <tr
-                            key={etf.ticker}
-                            className={`text-xs transition cursor-pointer ${
-                              isSelected
-                                ? 'bg-amber-500/10 border-l-2 border-amber-500'
-                                : 'hover:bg-gray-800/30'
-                            }`}
-                            onClick={() => handleQuickSelectEtf(etf, status?.total_value || 3500)}
-                          >
-                            <td className="px-4 py-3">
-                              <span className={`font-black font-mono text-sm ${ isSelected ? 'text-amber-400' : 'text-white' }`}>{etf.ticker}</span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className="px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-full text-[9px] font-bold">{etf.cat}</span>
-                            </td>
-                            <td className="px-4 py-3 text-gray-400 font-medium">{etf.clase}</td>
-                            <td className="px-4 py-3">
-                              <span className="px-2 py-0.5 bg-gray-800 text-gray-400 rounded text-[9px] font-bold">{etf.tipo}</span>
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <span className="font-mono font-bold text-emerald-400">{etf.pct}%</span>
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                              <span className="font-mono font-black text-white">${monto.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0})} <span className="text-gray-500 font-normal">USD</span></span>
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              {loadingBuyEtf && isSelected
-                                ? <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500 mx-auto" />
-                                : <span className={`text-[9px] font-black uppercase ${ isSelected ? 'text-amber-400' : 'text-gray-600 group-hover:text-gray-400' }`}>
-                                    {isSelected ? '✓ Seleccionado' : 'Seleccionar'}
-                                  </span>
-                              }
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                    {/* Fila total costo ponderado */}
-                    <tfoot>
-                      <tr className="bg-gray-900/80 text-[9px] text-gray-500 font-black uppercase tracking-wider border-t border-gray-700">
-                        <td colSpan={4} className="px-4 py-2.5">Costo total ponderado</td>
-                        <td className="px-4 py-2.5 text-right text-white">100%</td>
-                        <td className="px-4 py-2.5 text-right font-mono text-amber-400">${(status?.total_value || 3500).toLocaleString(undefined, {minimumFractionDigits:0})} USD</td>
-                        <td className="px-4 py-2.5 text-center font-mono text-emerald-400">0.100%</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
 
               {/* ── SECCIÓN 2: Panel del ETF seleccionado ── */}
               {buyEtfInfo && (
@@ -1682,68 +1573,80 @@ export default function DashboardPage() {
                     </div>
 
                     {/* Cajas de datos clave */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      {/* Comisión */}
-                      <div className="bg-gray-950/60 border border-gray-800 rounded-xl p-3 text-center space-y-1">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">Comisión (TER)</span>
-                        <span className="text-lg font-black font-mono text-white block">{buyEtfInfo.fee}</span>
-                        <span className="text-[9px] text-gray-600">anual</span>
-                      </div>
-                      {/* Costo ponderado */}
-                      <div className="bg-gray-950/60 border border-gray-800 rounded-xl p-3 text-center space-y-1">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">Peso en Portafolio</span>
-                        <span className="text-lg font-black font-mono text-amber-400 block">{buyEtfInfo.pct}%</span>
-                        <span className="text-[9px] text-gray-600">del total</span>
-                      </div>
-                      {/* Monto asignado */}
-                      <div className="bg-gray-950/60 border border-gray-800 rounded-xl p-3 text-center space-y-1">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">Monto Asignado</span>
-                        <span className="text-base font-black font-mono text-emerald-400 block">${((buyEtfInfo.pct / 100) * (status?.total_value || 3500)).toLocaleString(undefined, {minimumFractionDigits:0})} <span className="text-[10px] text-gray-500">USD</span></span>
-                        <span className="text-[9px] text-gray-600">inversión inicial</span>
-                      </div>
-                      {/* Rendimiento histórico 5y */}
-                      <div className="bg-gray-950/60 border border-gray-800 rounded-xl p-3 text-center space-y-1">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">Rend. Histórico</span>
-                        <span className={`text-lg font-black font-mono block ${ parseFloat(buyEtfInfo.retorno5y) >= 0 ? 'text-emerald-400' : 'text-red-400' }`}>{buyEtfInfo.retorno5y}</span>
-                        <span className="text-[9px] text-gray-600">promedio 5 años</span>
-                      </div>
-                    </div>
-
-                    {/* Proyección: Inversión inicial + aportaciones mensuales */}
                     {(() => {
-                      const inicial = (buyEtfInfo.pct / 100) * (status?.total_value || 3500);
-                      const mensual = (buyEtfInfo.pct / 100) * 50; // $50 mensuales del plan
-                      const tasa = parseFloat(buyEtfInfo.retorno5y) / 100 || 0;
+                      const activePct = parseFloat(porcentajeInversion) || 10;
+                      const activeMonto = parseFloat(montoUSD) || ((activePct / 100) * (status?.total_value || 3500));
+                      const mensual = (activePct / 100) * 50; // Aporte mensual basado en el peso objetivo
+                      const tasa = parseFloat(buyEtfInfo.retorno5y) / 100 || 0.08; // Default 8% if N/A
                       const tasaMensual = tasa / 12;
                       const meses = 120; // 10 años
-                      const futuroInicial = inicial * Math.pow(1 + tasa, 10);
+                      const futuroInicial = activeMonto * Math.pow(1 + tasa, 10);
                       const futuroAportaciones = mensual > 0 && tasaMensual > 0
                         ? mensual * ((Math.pow(1 + tasaMensual, meses) - 1) / tasaMensual)
                         : mensual * meses;
                       const totalFuturo = futuroInicial + futuroAportaciones;
-                      const totalInvertido = inicial + (mensual * meses);
+                      const totalInvertido = activeMonto + (mensual * meses);
                       const ganancia = totalFuturo - totalInvertido;
+                      const currencySymbol = status?.moneda || 'USD';
+
                       return (
-                        <div className="border-t border-gray-800/60 pt-3 space-y-2">
-                          <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">Proyección a 10 años (basada en rendimiento histórico)</span>
-                          <div className="grid grid-cols-3 gap-2">
-                            <div className="bg-gray-950/40 rounded-xl p-3 border border-gray-800/50 text-center">
-                              <span className="text-[9px] text-gray-500 block font-bold uppercase">Invertido Total</span>
-                              <span className="font-mono font-black text-sm text-gray-300 block mt-1">${totalInvertido.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0})}</span>
-                              <span className="text-[9px] text-gray-600">${inicial.toFixed(0)} inicial + ${(mensual*meses).toFixed(0)} aportes</span>
+                        <>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            {/* Comisión */}
+                            <div className="bg-gray-950/60 border border-gray-800 rounded-xl p-3 text-center space-y-1">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">Comisión (TER)</span>
+                              <span className="text-lg font-black font-mono text-white block">{buyEtfInfo.fee}</span>
+                              <span className="text-[9px] text-gray-600">anual</span>
                             </div>
-                            <div className="bg-emerald-950/20 rounded-xl p-3 border border-emerald-800/30 text-center">
-                              <span className="text-[9px] text-gray-500 block font-bold uppercase">Rendimiento</span>
-                              <span className="font-mono font-black text-sm text-emerald-400 block mt-1">+${ganancia.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0})}</span>
-                              <span className="text-[9px] text-emerald-600">{buyEtfInfo.retorno5y} / año (est.)</span>
+                            {/* Costo ponderado */}
+                            <div className="bg-gray-950/60 border border-gray-800 rounded-xl p-3 text-center space-y-1">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">Peso Estimado</span>
+                              <span className="text-lg font-black font-mono text-amber-400 block">{activePct.toFixed(1)}%</span>
+                              <span className="text-[9px] text-gray-600">del total</span>
                             </div>
-                            <div className="bg-amber-950/20 rounded-xl p-3 border border-amber-800/30 text-center">
-                              <span className="text-[9px] text-gray-500 block font-bold uppercase">Total Proyectado</span>
-                              <span className="font-mono font-black text-sm text-amber-400 block mt-1">${totalFuturo.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0})}</span>
-                              <span className="text-[9px] text-amber-700">en 10 años</span>
+                            {/* Monto asignado */}
+                            <div className="bg-gray-950/60 border border-gray-800 rounded-xl p-3 text-center space-y-1">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">Monto Asignado</span>
+                              <span className="text-base font-black font-mono text-emerald-400 block">
+                                ${activeMonto.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:2})} <span className="text-[9px] text-gray-500 font-normal">{currencySymbol}</span>
+                              </span>
+                              <span className="text-[9px] text-gray-600">esta operación</span>
+                            </div>
+                            {/* Rendimiento histórico 5y */}
+                            <div className="bg-gray-950/60 border border-gray-800 rounded-xl p-3 text-center space-y-1">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 block">Rend. Histórico</span>
+                              <span className={`text-lg font-black font-mono block ${ parseFloat(buyEtfInfo.retorno5y) >= 0 || buyEtfInfo.retorno5y === "N/A" ? 'text-emerald-400' : 'text-red-400' }`}>{buyEtfInfo.retorno5y}</span>
+                              <span className="text-[9px] text-gray-600">promedio 5 años</span>
                             </div>
                           </div>
-                        </div>
+
+                          {/* Proyección: Inversión inicial + aportaciones mensuales */}
+                          <div className="border-t border-gray-800/60 pt-3 space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-gray-500">Proyección a 10 años (rendimiento estimado {buyEtfInfo.retorno5y !== 'N/A' ? buyEtfInfo.retorno5y : '8.0%'})</span>
+                              {!porcentajeInversion && (
+                                <span className="text-[8px] text-amber-500 font-bold uppercase tracking-wider bg-amber-500/10 px-2 py-0.5 rounded-full">Vista Previa (10%)</span>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div className="bg-gray-950/40 rounded-xl p-3 border border-gray-800/50 text-center">
+                                <span className="text-[9px] text-gray-500 block font-bold uppercase">Invertido Total</span>
+                                <span className="font-mono font-black text-sm text-gray-300 block mt-1">${totalInvertido.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0})}</span>
+                                <span className="text-[9px] text-gray-600">${activeMonto.toFixed(0)} inicial + ${(mensual*meses).toFixed(0)} aportes</span>
+                              </div>
+                              <div className="bg-emerald-950/20 rounded-xl p-3 border border-emerald-800/30 text-center">
+                                <span className="text-[9px] text-gray-500 block font-bold uppercase">Rendimiento</span>
+                                <span className="font-mono font-black text-sm text-emerald-400 block mt-1">+${ganancia.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0})}</span>
+                                <span className="text-[9px] text-emerald-600">{buyEtfInfo.retorno5y !== 'N/A' ? buyEtfInfo.retorno5y : '8.0%'} / año (est.)</span>
+                              </div>
+                              <div className="bg-amber-950/20 rounded-xl p-3 border border-amber-800/30 text-center">
+                                <span className="text-[9px] text-gray-500 block font-bold uppercase">Total Proyectado</span>
+                                <span className="font-mono font-black text-sm text-amber-400 block mt-1">${totalFuturo.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0})}</span>
+                                <span className="text-[9px] text-amber-700">en 10 años</span>
+                              </div>
+                            </div>
+                          </div>
+                        </>
                       );
                     })()}
                   </div>
@@ -1786,35 +1689,27 @@ export default function DashboardPage() {
                       </span>
                     </div>
 
-                    {/* Switch manual + precio en vivo */}
-                    <div className="flex flex-col gap-2 bg-[#0d121f] p-3 rounded-xl border border-gray-800">
-                      <label className="text-xs text-gray-400 font-bold cursor-pointer select-none flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={isManualAsset}
-                          onChange={(e) => handleManualAssetToggle(e.target.checked)}
-                          className="rounded border-gray-800 text-amber-500 focus:ring-amber-500/20 bg-gray-900 cursor-pointer"
-                        />
-                        Activo Manual (Sin cotización en Yahoo)
-                      </label>
-                      {isManualAsset && (
-                        <div className="space-y-1 mt-1.5 border-t border-gray-800/40 pt-2">
+                    {/* Precio Unitario */}
+                    <div className="flex flex-col gap-2 bg-[#0d121f] p-4 rounded-xl border border-gray-800">
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center">
                           <label className="text-[10px] font-bold text-amber-500 uppercase tracking-wide">Precio Unitario ({status?.moneda || 'USD'})</label>
-                          <input
-                            type="number"
-                            value={manualPriceInput}
-                            onChange={(e) => handleManualPriceChange(e.target.value)}
-                            placeholder="Ingresa el precio unitario..."
-                            className="w-full bg-[#111827] border border-amber-500/30 rounded-lg px-3 py-1.5 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
-                            min="0" step="any" required={isManualAsset}
-                          />
+                          {livePrice !== null && (
+                            <span className="text-[9px] text-emerald-500 font-mono flex items-center gap-1">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                              En Vivo: ${livePrice.toFixed(2)}
+                            </span>
+                          )}
                         </div>
-                      )}
-                      {!isManualAsset && livePrice && (
-                        <div className="text-[10px] text-emerald-500 font-mono text-right mt-1 border-t border-gray-800/40 pt-2">
-                          ● Precio en Vivo ({status?.moneda || 'USD'}): ${livePrice.toFixed(2)}
-                        </div>
-                      )}
+                        <input
+                          type="number"
+                          value={precioUnitario}
+                          onChange={(e) => handlePrecioUnitarioChange(e.target.value)}
+                          placeholder="0.00"
+                          className="w-full bg-[#111827] border border-amber-500/30 rounded-lg px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
+                          min="0" step="any" required
+                        />
+                      </div>
                     </div>
 
                     {/* Monto | % | Títulos */}
@@ -1866,14 +1761,20 @@ export default function DashboardPage() {
                     </div>
                     <div className="space-y-1 col-span-2">
                       <label className="text-xs font-bold text-amber-500 uppercase tracking-wide">Clase de Activo (Tu Estrategia)</label>
-                      <select value={seccion} onChange={(e) => setSeccion(e.target.value)}
-                        className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 transition cursor-pointer"
-                        required>
-                        <option value="" disabled>Selecciona una meta...</option>
+                      <input
+                        type="text"
+                        value={seccion}
+                        onChange={(e) => setSeccion(e.target.value)}
+                        list="secciones-datalist"
+                        placeholder="Ej: Acciones EE.UU., Renta Fija, Cripto..."
+                        className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 transition"
+                        required
+                      />
+                      <datalist id="secciones-datalist">
                         {(status?.secciones || []).map((sec: any) => (
-                          <option key={sec.nombre_seccion} value={sec.nombre_seccion}>{sec.nombre_seccion}</option>
+                          <option key={sec.nombre_seccion} value={sec.nombre_seccion} />
                         ))}
-                      </select>
+                      </datalist>
                     </div>
                   </div>
 
