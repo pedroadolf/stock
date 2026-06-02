@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "python3 main.py",
+    "dev": "if [ -d venv ]; then venv/bin/python server.py; else python3 server.py; fi",
     "start": "python3 main.py"
   }
 }

@@ -9,7 +9,7 @@
     "apps/backend"
   ],
   "scripts": {
-    "dev": "turbo run dev --filter=web",
+    "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
