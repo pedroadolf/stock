@@ -148,6 +148,19 @@ export default function DashboardPage() {
   // Acordeón de la tabla de distribución
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
 
+  // Estados para sub-portafolios de instrumentos
+  const [expandedSubPortfolios, setExpandedSubPortfolios] = useState<Record<string, boolean>>({});
+  const [configuringSubPortfolio, setConfiguringSubPortfolio] = useState<{ ticker: string; seccion: string } | null>(null);
+  const [subPortfolioType, setSubPortfolioType] = useState<'porcentajes' | 'ahorro'>('porcentajes');
+  const [subPortfolioItems, setSubPortfolioItems] = useState<Array<{ ticker: string; porcentaje: number }>>([]);
+  const [subPortfolioAhorro, setSubPortfolioAhorro] = useState({
+    institucion: "",
+    inicial: "",
+    mensual: "",
+    moneda: "USD"
+  });
+  const [savingSubPortfolio, setSavingSubPortfolio] = useState(false);
+
   // Carga inicial y listeners
   useEffect(() => {
     const storedTheme = (localStorage.getItem('theme') as 'dark' | 'light') || 'dark';
@@ -208,6 +221,141 @@ export default function DashboardPage() {
     setTheme(nextTheme);
     document.documentElement.setAttribute('data-theme', nextTheme);
     localStorage.setItem('theme', nextTheme);
+  };
+
+  const toggleSubPortfolioExpand = (ticker: string) => {
+    setExpandedSubPortfolios(prev => ({ ...prev, [ticker]: !prev[ticker] }));
+  };
+
+  const startConfigureSubPortfolio = (ticker: string, seccion: string, existingSubPortfolio?: any) => {
+    setConfiguringSubPortfolio({ ticker, seccion });
+    if (existingSubPortfolio) {
+      setSubPortfolioType(existingSubPortfolio.tipo);
+      if (existingSubPortfolio.tipo === 'porcentajes') {
+        setSubPortfolioItems(existingSubPortfolio.metadata?.valores || []);
+        setSubPortfolioAhorro({ institucion: "", inicial: "", mensual: "", moneda: "USD" });
+      } else {
+        setSubPortfolioItems([]);
+        setSubPortfolioAhorro({
+          institucion: existingSubPortfolio.metadata?.institucion || "",
+          inicial: existingSubPortfolio.metadata?.inicial?.toString() || "",
+          mensual: existingSubPortfolio.metadata?.mensual?.toString() || "",
+          moneda: existingSubPortfolio.metadata?.moneda || "USD"
+        });
+      }
+    } else {
+      const isPpr = seccion.toUpperCase().includes("PPR");
+      const initialType = isPpr ? 'ahorro' : 'porcentajes';
+      setSubPortfolioType(initialType);
+      setSubPortfolioItems([{ ticker: "", porcentaje: 100 }]);
+      setSubPortfolioAhorro({
+        institucion: "",
+        inicial: "",
+        mensual: "",
+        moneda: status?.moneda || "USD"
+      });
+    }
+  };
+
+  const addSubPortfolioRow = () => {
+    setSubPortfolioItems(prev => [...prev, { ticker: "", porcentaje: 0 }]);
+  };
+
+  const removeSubPortfolioRow = (index: number) => {
+    setSubPortfolioItems(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateSubPortfolioRow = (index: number, field: 'ticker' | 'porcentaje', value: string) => {
+    setSubPortfolioItems(prev => prev.map((item, i) => {
+      if (i === index) {
+        return {
+          ...item,
+          [field]: field === 'porcentaje' ? (parseFloat(value) || 0) : value.toUpperCase()
+        };
+      }
+      return item;
+    }));
+  };
+
+  const handleSaveSubPortfolio = async () => {
+    if (!configuringSubPortfolio || !selectedPortfolioId || !userId) return;
+    setSavingSubPortfolio(true);
+    try {
+      const { ticker } = configuringSubPortfolio;
+      let metadata: any = {};
+      
+      if (subPortfolioType === 'porcentajes') {
+        const validItems = subPortfolioItems.filter(item => item.ticker.trim() !== "");
+        if (validItems.length === 0) {
+          alert("Debes agregar al menos un instrumento válido.");
+          setSavingSubPortfolio(false);
+          return;
+        }
+        
+        const sum = validItems.reduce((acc, curr) => acc + curr.porcentaje, 0);
+        if (Math.abs(sum - 100) > 0.01) {
+          alert(`La suma de los porcentajes debe ser exactamente 100% (Suma actual: ${sum}%).`);
+          setSavingSubPortfolio(false);
+          return;
+        }
+        
+        metadata = { valores: validItems };
+      } else {
+        if (!subPortfolioAhorro.institucion.trim()) {
+          alert("Debes ingresar el nombre de la institución.");
+          setSavingSubPortfolio(false);
+          return;
+        }
+        
+        metadata = {
+          institucion: subPortfolioAhorro.institucion,
+          inicial: parseFloat(subPortfolioAhorro.inicial) || 0,
+          mensual: parseFloat(subPortfolioAhorro.mensual) || 0,
+          moneda: subPortfolioAhorro.moneda
+        };
+      }
+      
+      const res = await backendApi.saveInstrumentSubPortfolio(
+        selectedPortfolioId,
+        userId,
+        ticker,
+        subPortfolioType,
+        metadata
+      );
+      
+      if (res.success) {
+        setConfiguringSubPortfolio(null);
+        setExpandedSubPortfolios(prev => ({ ...prev, [ticker]: true }));
+        await refreshPortfolioStatus(selectedPortfolioId, userId);
+      } else {
+        alert("Error al guardar sub-portafolio.");
+      }
+    } catch (err: any) {
+      alert("Error de red al guardar: " + err.message);
+    } finally {
+      setSavingSubPortfolio(false);
+    }
+  };
+
+  const handleDeleteSubPortfolio = async (ticker: string) => {
+    if (!selectedPortfolioId || !userId) return;
+    if (!confirm(`¿Estás seguro de eliminar la configuración del portafolio para ${ticker}?`)) return;
+    
+    try {
+      const res = await backendApi.deleteInstrumentSubPortfolio(selectedPortfolioId, userId, ticker);
+      if (res.success) {
+        setExpandedSubPortfolios(prev => {
+          const next = { ...prev };
+          delete next[ticker];
+          return next;
+        });
+        await refreshPortfolioStatus(selectedPortfolioId, userId);
+      } else {
+        alert("Error al eliminar sub-portafolio.");
+      }
+    } catch (err: any) {
+      alert("Error de red al eliminar: " + err.message);
+    }
   };
 
   const refreshPortfolioStatus = async (portfolioId: string, currentUserId: string) => {
@@ -943,73 +1091,325 @@ export default function DashboardPage() {
                               </td>
                             </tr>
                             
-                            {isExpanded && seccionHoldings.length > 0 && seccionHoldings.map((h: any) => (
-                              <tr key={h.ticker} className="bg-gray-900/25 hover:bg-gray-800/10 transition-colors border-t border-gray-800/20">
-                                {/* Col 1: Instrument Details */}
-                                <td className="py-2.5 pl-12">
-                                  <div className="flex items-center gap-2">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                                    <span className="font-bold text-amber-500 font-mono shrink-0">{h.ticker}</span>
-                                    <span className="text-gray-400 truncate max-w-[150px] [data-theme='light']:text-gray-600 font-medium" title={h.nombre}>
-                                      {h.nombre}
-                                    </span>
-                                    <span className="text-[10px] text-gray-500 font-mono ml-auto">
-                                      ({h.cantidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })} tit.)
-                                    </span>
-                                  </div>
-                                </td>
-                                
-                                {/* Col 2: Target % (Editable) */}
-                                <td className="py-2.5 text-center font-mono select-none">
-                                  {editingTicker === h.ticker ? (
-                                    <input
-                                      type="number"
-                                      value={editValue}
-                                      onChange={(e) => setEditValue(e.target.value)}
-                                      onBlur={() => handleSaveInstrumentTarget(h.ticker, sec.nombre_seccion)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') handleSaveInstrumentTarget(h.ticker, sec.nombre_seccion);
-                                        if (e.key === 'Escape') setEditingTicker(null);
-                                      }}
-                                      className="w-16 bg-[#111827] border border-amber-500 text-center font-mono text-white text-xs rounded py-0.5 focus:outline-none"
-                                      autoFocus
-                                      step="0.1"
-                                      min="0"
-                                      max="100"
-                                    />
-                                  ) : (
-                                    <div 
-                                      className="group inline-flex items-center justify-center gap-1 cursor-pointer hover:bg-gray-800/60 px-2 py-0.5 rounded transition"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setEditingTicker(h.ticker);
-                                        setEditValue((h.porcentaje_objetivo_clase || 0).toString());
-                                      }}
-                                    >
-                                      <span className="font-mono text-gray-300 font-bold">{(h.porcentaje_objetivo_clase || 0).toFixed(1)}%</span>
-                                      <Edit2 className="h-3 w-3 text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                    </div>
+                            {isExpanded && seccionHoldings.length > 0 && seccionHoldings.map((h: any) => {
+                              const hasSubPortfolio = h.sub_portafolio !== null && h.sub_portafolio !== undefined;
+                              const isSubPortfolioExpanded = expandedSubPortfolios[h.ticker];
+                              const isConfiguringThis = configuringSubPortfolio?.ticker === h.ticker;
+                              
+                              return (
+                                <React.Fragment key={h.ticker}>
+                                  <tr className="group bg-gray-900/25 hover:bg-gray-800/10 transition-colors border-t border-gray-800/20">
+                                    {/* Col 1: Instrument Details */}
+                                    <td className="py-2.5 pl-12">
+                                      <div className="flex items-center gap-2">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                                        <span className="font-bold text-amber-500 font-mono shrink-0">{h.ticker}</span>
+                                        <span className="text-gray-400 truncate max-w-[120px] [data-theme='light']:text-gray-600 font-medium" title={h.nombre}>
+                                          {h.nombre}
+                                        </span>
+                                        <span className="text-[10px] text-gray-500 font-mono ml-auto">
+                                          ({h.cantidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })} tit.)
+                                        </span>
+                                        
+                                        {/* Acciones de Sub-portafolio */}
+                                        {hasSubPortfolio ? (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              toggleSubPortfolioExpand(h.ticker);
+                                            }}
+                                            className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded px-1.5 py-0.5 hover:bg-indigo-500/30 transition flex items-center gap-1 cursor-pointer"
+                                            title="Ver portafolio de este instrumento"
+                                          >
+                                            <Briefcase className="w-2.5 h-2.5" />
+                                            {isSubPortfolioExpanded ? 'Ocultar' : 'Portafolio'}
+                                          </button>
+                                        ) : (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              startConfigureSubPortfolio(h.ticker, h.seccion);
+                                            }}
+                                            className="text-[9px] opacity-0 group-hover:opacity-100 hover:opacity-100 bg-gray-800/80 text-gray-400 border border-gray-700/60 rounded px-1.5 py-0.5 hover:text-white transition flex items-center gap-1 cursor-pointer"
+                                          >
+                                            <Plus className="w-2.5 h-2.5" />
+                                            Incluir Portafolio
+                                          </button>
+                                        )}
+                                      </div>
+                                    </td>
+                                    
+                                    {/* Col 2: Target % (Editable) */}
+                                    <td className="py-2.5 text-center font-mono select-none">
+                                      {editingTicker === h.ticker ? (
+                                        <input
+                                          type="number"
+                                          value={editValue}
+                                          onChange={(e) => setEditValue(e.target.value)}
+                                          onBlur={() => handleSaveInstrumentTarget(h.ticker, sec.nombre_seccion)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') handleSaveInstrumentTarget(h.ticker, sec.nombre_seccion);
+                                            if (e.key === 'Escape') setEditingTicker(null);
+                                          }}
+                                          className="w-16 bg-[#111827] border border-amber-500 text-center font-mono text-white text-xs rounded py-0.5 focus:outline-none"
+                                          autoFocus
+                                          step="0.1"
+                                          min="0"
+                                          max="100"
+                                        />
+                                      ) : (
+                                        <div 
+                                          className="group inline-flex items-center justify-center gap-1 cursor-pointer hover:bg-gray-800/60 px-2 py-0.5 rounded transition"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setEditingTicker(h.ticker);
+                                            setEditValue((h.porcentaje_objetivo_clase || 0).toString());
+                                          }}
+                                        >
+                                          <span className="font-mono text-gray-300 font-bold">{(h.porcentaje_objetivo_clase || 0).toFixed(1)}%</span>
+                                          <Edit2 className="h-3 w-3 text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        </div>
+                                      )}
+                                      <div className="text-[9px] text-gray-500 mt-0.5">({(h.porcentaje_objetivo_total || 0).toFixed(2)}% total)</div>
+                                    </td>
+
+                                    {/* Col 3: Actual % */}
+                                    <td className="py-2.5 text-center font-mono">
+                                      <div className="text-gray-300">{(h.porcentaje_real_clase || 0).toFixed(1)}%</div>
+                                      <div className="text-[9px] text-gray-500 mt-0.5">({(h.porcentaje_real_total || 0).toFixed(2)}% total)</div>
+                                    </td>
+
+                                    {/* Col 4: Inversión Actual */}
+                                    <td className="py-2.5 text-right font-mono text-white [data-theme='light']:text-gray-900">
+                                      ${h.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}
+                                    </td>
+
+                                    {/* Col 5: Diferencia */}
+                                    <td className={`py-2.5 text-right font-mono font-bold ${h.desviacion_valor >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                                      {h.desviacion_valor >= 0 ? "+" : ""}${h.desviacion_valor.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}
+                                    </td>
+                                  </tr>
+
+                                  {/* RENDERIZAR EDICIÓN DEL SUBPORTAFOLIO */}
+                                  {isConfiguringThis && (
+                                    <tr className="bg-slate-900/40 border-t border-b border-gray-800">
+                                      <td colSpan={5} className="py-4 pl-16 pr-6">
+                                        <div className="bg-[#111827] border border-gray-800 rounded-2xl p-5 space-y-4">
+                                          <div className="flex justify-between items-center pb-2 border-b border-gray-800">
+                                            <h4 className="text-xs font-black uppercase text-amber-500 tracking-wider">
+                                              Configurar Portafolio para {h.ticker}
+                                            </h4>
+                                            <div className="flex gap-2">
+                                              <button 
+                                                onClick={() => setSubPortfolioType('porcentajes')}
+                                                className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition border ${subPortfolioType === 'porcentajes' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' : 'bg-transparent text-gray-400 border-gray-800 hover:text-white'}`}
+                                              >
+                                                Distribución % (ETFs)
+                                              </button>
+                                              <button 
+                                                onClick={() => setSubPortfolioType('ahorro')}
+                                                className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition border ${subPortfolioType === 'ahorro' ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' : 'bg-transparent text-gray-400 border-gray-800 hover:text-white'}`}
+                                              >
+                                                Plan Ahorro (PPR)
+                                              </button>
+                                            </div>
+                                          </div>
+                                          
+                                          {subPortfolioType === 'porcentajes' ? (
+                                            <div className="space-y-3">
+                                              <p className="text-[10px] text-gray-500">Distribuye el valor de este instrumento en un portafolio de activos. La suma de los porcentajes debe ser exactamente 100%.</p>
+                                              <div className="space-y-2">
+                                                {subPortfolioItems.map((item, idx) => (
+                                                  <div key={idx} className="flex items-center gap-3">
+                                                    <input 
+                                                      type="text" 
+                                                      placeholder="Ticker (ej: VTI)" 
+                                                      value={item.ticker}
+                                                      onChange={(e) => updateSubPortfolioRow(idx, 'ticker', e.target.value)}
+                                                      className="w-1/3 bg-gray-950 border border-gray-800 rounded-xl px-3 py-1.5 text-xs text-white uppercase font-mono focus:outline-none focus:border-amber-500"
+                                                    />
+                                                    <div className="relative w-1/3">
+                                                      <input 
+                                                        type="number" 
+                                                        placeholder="Porcentaje" 
+                                                        value={item.porcentaje || ""}
+                                                        onChange={(e) => updateSubPortfolioRow(idx, 'porcentaje', e.target.value)}
+                                                        className="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-1.5 pr-8 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                                                        min="0"
+                                                        max="100"
+                                                      />
+                                                      <span className="absolute right-3 top-2 text-xs text-gray-500 font-mono">%</span>
+                                                    </div>
+                                                    {subPortfolioItems.length > 1 && (
+                                                      <button 
+                                                        onClick={() => removeSubPortfolioRow(idx)}
+                                                        className="p-1.5 text-red-500/70 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition"
+                                                      >
+                                                        <Trash2 className="w-4 h-4" />
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                ))}
+                                              </div>
+                                              
+                                              <div className="flex justify-between items-center pt-2">
+                                                <button 
+                                                  onClick={addSubPortfolioRow}
+                                                  className="text-[10px] font-bold text-amber-500 hover:text-amber-400 flex items-center gap-1.5"
+                                                >
+                                                  <Plus className="w-3.5 h-3.5" /> Agregar Activo
+                                                </button>
+                                                <span className={`text-[10px] font-mono font-bold ${Math.abs(subPortfolioItems.reduce((acc, curr) => acc + curr.porcentaje, 0) - 100) < 0.01 ? 'text-emerald-500' : 'text-amber-500'}`}>
+                                                  Suma: {subPortfolioItems.reduce((acc, curr) => acc + curr.porcentaje, 0)}%
+                                                </span>
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            <div className="grid grid-cols-2 gap-4">
+                                              <div className="col-span-2 space-y-1">
+                                                <label className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Institución / Gestor</label>
+                                                <input 
+                                                  type="text" 
+                                                  placeholder="ej: Fintual, Allianz, etc." 
+                                                  value={subPortfolioAhorro.institucion}
+                                                  onChange={(e) => setSubPortfolioAhorro(prev => ({ ...prev, institucion: e.target.value }))}
+                                                  className="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                                                />
+                                              </div>
+                                              <div className="space-y-1">
+                                                <label className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Aportación Inicial</label>
+                                                <input 
+                                                  type="number" 
+                                                  placeholder="ej: 3000" 
+                                                  value={subPortfolioAhorro.inicial}
+                                                  onChange={(e) => setSubPortfolioAhorro(prev => ({ ...prev, inicial: e.target.value }))}
+                                                  className="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                                                />
+                                              </div>
+                                              <div className="space-y-1">
+                                                <label className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Aportación Mensual</label>
+                                                <input 
+                                                  type="number" 
+                                                  placeholder="ej: 50" 
+                                                  value={subPortfolioAhorro.mensual}
+                                                  onChange={(e) => setSubPortfolioAhorro(prev => ({ ...prev, mensual: e.target.value }))}
+                                                  className="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                                                />
+                                              </div>
+                                              <div className="col-span-2 space-y-1">
+                                                <label className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Moneda</label>
+                                                <select 
+                                                  value={subPortfolioAhorro.moneda}
+                                                  onChange={(e) => setSubPortfolioAhorro(prev => ({ ...prev, moneda: e.target.value }))}
+                                                  className="w-full bg-gray-950 border border-gray-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                                                >
+                                                  <option value="USD">USD ($)</option>
+                                                  <option value="MXN">MXN ($)</option>
+                                                  <option value="EUR">EUR (€)</option>
+                                                </select>
+                                              </div>
+                                            </div>
+                                          )}
+                                          
+                                          <div className="flex gap-2 justify-end pt-2 border-t border-gray-800">
+                                            <button 
+                                              onClick={() => setConfiguringSubPortfolio(null)}
+                                              className="px-4 py-2 border border-gray-800 text-gray-400 hover:text-white rounded-xl text-[10px] font-bold uppercase tracking-wider transition"
+                                            >
+                                              Cancelar
+                                            </button>
+                                            <button 
+                                              onClick={handleSaveSubPortfolio}
+                                              disabled={savingSubPortfolio}
+                                              className="px-4 py-2 bg-amber-500 text-slate-900 font-bold rounded-xl text-[10px] uppercase tracking-wider hover:bg-amber-400 transition flex items-center gap-1.5"
+                                            >
+                                              {savingSubPortfolio && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                                              Guardar
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
                                   )}
-                                  <div className="text-[9px] text-gray-500 mt-0.5">({(h.porcentaje_objetivo_total || 0).toFixed(2)}% total)</div>
-                                </td>
 
-                                {/* Col 3: Actual % */}
-                                <td className="py-2.5 text-center font-mono">
-                                  <div className="text-gray-300">{(h.porcentaje_real_clase || 0).toFixed(1)}%</div>
-                                  <div className="text-[9px] text-gray-500 mt-0.5">({(h.porcentaje_real_total || 0).toFixed(2)}% total)</div>
-                                </td>
-
-                                {/* Col 4: Inversión Actual */}
-                                <td className="py-2.5 text-right font-mono text-white [data-theme='light']:text-gray-900">
-                                  ${h.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}
-                                </td>
-
-                                {/* Col 5: Diferencia */}
-                                <td className={`py-2.5 text-right font-mono font-bold ${h.desviacion_valor >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                                  {h.desviacion_valor >= 0 ? "+" : ""}${h.desviacion_valor.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}
-                                </td>
-                              </tr>
-                            ))}
+                                  {/* RENDERIZAR DETALLES DEL SUBPORTAFOLIO */}
+                                  {isSubPortfolioExpanded && hasSubPortfolio && (
+                                    <tr className="bg-slate-950/20 border-t border-gray-800/10">
+                                      <td colSpan={5} className="py-3 pl-16 pr-6">
+                                        <div className="bg-slate-900/30 border border-gray-800/60 rounded-xl p-4 space-y-3">
+                                          <div className="flex justify-between items-center">
+                                            <span className="text-[10px] text-gray-500 font-black uppercase tracking-wider">
+                                              Composición de Portafolio: {h.ticker}
+                                            </span>
+                                            <div className="flex gap-2">
+                                              <button 
+                                                onClick={() => startConfigureSubPortfolio(h.ticker, h.seccion, h.sub_portafolio)}
+                                                className="text-[9px] text-amber-500 hover:text-amber-400 font-bold uppercase flex items-center gap-1"
+                                              >
+                                                <Edit2 className="w-3 h-3" /> Editar
+                                              </button>
+                                              <button 
+                                                onClick={() => handleDeleteSubPortfolio(h.ticker)}
+                                                className="text-[9px] text-red-500/80 hover:text-red-500 font-bold uppercase flex items-center gap-1"
+                                              >
+                                                <Trash2 className="w-3 h-3" /> Eliminar
+                                              </button>
+                                            </div>
+                                          </div>
+                                          
+                                          {h.sub_portafolio.tipo === 'porcentajes' ? (
+                                            <div className="overflow-hidden border border-gray-800/50 rounded-lg">
+                                              <table className="w-full text-left border-collapse text-[11px]">
+                                                <thead>
+                                                  <tr className="bg-gray-950/40 text-[9px] text-gray-500 uppercase font-black border-b border-gray-800/50">
+                                                    <th className="py-2 px-3">Activo</th>
+                                                    <th className="py-2 px-3 text-center">Porcentaje (%)</th>
+                                                    <th className="py-2 px-3 text-right">Valor Asignado</th>
+                                                  </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-800/30 font-mono">
+                                                  {(h.sub_portafolio.metadata?.valores || []).map((vItem: any, vIdx: number) => {
+                                                    const itemVal = (vItem.porcentaje / 100) * h.valor_actual;
+                                                    return (
+                                                      <tr key={vIdx} className="hover:bg-gray-800/10">
+                                                        <td className="py-2 px-3 font-bold text-amber-500">{vItem.ticker}</td>
+                                                        <td className="py-2 px-3 text-center text-gray-300">{vItem.porcentaje}%</td>
+                                                        <td className="py-2 px-3 text-right text-white">
+                                                          ${itemVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}
+                                                        </td>
+                                                      </tr>
+                                                    );
+                                                  })}
+                                                </tbody>
+                                              </table>
+                                            </div>
+                                          ) : (
+                                            <div className="bg-gray-950/20 border border-gray-800/40 rounded-lg p-3 text-xs flex flex-wrap gap-x-8 gap-y-2">
+                                              <div>
+                                                <span className="text-[10px] text-gray-500 block uppercase font-bold">Institución</span>
+                                                <span className="font-bold text-white">{h.sub_portafolio.metadata?.institucion}</span>
+                                              </div>
+                                              <div>
+                                                <span className="text-[10px] text-gray-500 block uppercase font-bold">Inversión Inicial</span>
+                                                <span className="font-bold font-mono text-white">
+                                                  ${(h.sub_portafolio.metadata?.inicial || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} {h.sub_portafolio.metadata?.moneda || status?.moneda}
+                                                </span>
+                                              </div>
+                                              <div>
+                                                <span className="text-[10px] text-gray-500 block uppercase font-bold">Aportación Mensual</span>
+                                                <span className="font-bold font-mono text-amber-500">
+                                                  +${(h.sub_portafolio.metadata?.mensual || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} {h.sub_portafolio.metadata?.moneda || status?.moneda} / mes
+                                                </span>
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
                             
                             {/* Alerta si la suma de los objetivos de la clase no es 100% */}
                             {isExpanded && seccionHoldings.length > 0 && (() => {

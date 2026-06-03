@@ -286,5 +286,41 @@ export const backendApi = {
       }),
     });
   },
+
+  /**
+   * Guarda o actualiza la configuración del sub-portafolio de un instrumento
+   */
+  async saveInstrumentSubPortfolio(
+    portfolioId: string,
+    userId: string,
+    ticker: string,
+    tipo: 'porcentajes' | 'ahorro',
+    metadata: any
+  ): Promise<{ success: boolean; message: string }> {
+    return fetchFromBackend('/api/trades/instrument-sub-portfolio', {
+      method: 'POST',
+      headers: { 'User-ID': userId },
+      body: JSON.stringify({
+        portfolio_id: portfolioId,
+        ticker,
+        tipo,
+        metadata,
+      }),
+    });
+  },
+
+  /**
+   * Elimina la configuración del sub-portafolio de un instrumento
+   */
+  async deleteInstrumentSubPortfolio(
+    portfolioId: string,
+    userId: string,
+    ticker: string
+  ): Promise<{ success: boolean; message: string }> {
+    return fetchFromBackend(`/api/trades/instrument-sub-portfolio?portfolio_id=${encodeURIComponent(portfolioId)}&ticker=${encodeURIComponent(ticker)}`, {
+      method: 'DELETE',
+      headers: { 'User-ID': userId },
+    });
+  },
 };
 

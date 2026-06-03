@@ -600,6 +600,14 @@ class MCPRequestHandler:
                 print(f"⚠️ Warning: portafolio_instrumentos_objetivo query failed (migration might not be applied yet): {str(e)}")
                 inst_target_map = {}
 
+            # 7. Obtener sub-portafolios de instrumentos
+            try:
+                subport_res = self.supabase.table('portafolio_instrumento_subportafolios').select('*').eq('portafolio_id', portfolio_id).execute()
+                subport_map = {item['ticker']: {"tipo": item['tipo'], "metadata": item['metadata']} for item in subport_res.data} if subport_res.data else {}
+            except Exception as e:
+                print(f"⚠️ Warning: portafolio_instrumento_subportafolios query failed: {str(e)}")
+                subport_map = {}
+
             for hold in active_holdings:
                 ticker = hold["ticker"]
                 sec = hold["seccion"]
@@ -633,6 +641,7 @@ class MCPRequestHandler:
                 hold["porcentaje_real_clase"] = inst_actual_pct_clase
                 hold["porcentaje_real_total"] = inst_actual_pct_total
                 hold["desviacion_valor"] = desviacion_valor
+                hold["sub_portafolio"] = subport_map.get(ticker, None)
             
             return {
                 "success": True,
@@ -681,6 +690,54 @@ class MCPRequestHandler:
             ).execute()
             
             return {"success": True, "message": "Objetivo del instrumento guardado correctamente."}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def save_instrument_sub_portfolio(self, portfolio_id: str, user_id: str, ticker: str, tipo: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Guarda o actualiza la configuración del sub-portafolio de un instrumento.
+        """
+        try:
+            # 1. Validar propiedad del portafolio
+            port_res = self.supabase.table('portafolios').select('id, user_id').eq('id', portfolio_id).execute()
+            if not port_res.data:
+                return {"success": False, "error": "Portafolio no encontrado"}
+            if str(port_res.data[0]['user_id']) != str(user_id):
+                return {"success": False, "error": "Acceso no autorizado"}
+
+            # 2. Upsert
+            upsert_data = {
+                "portafolio_id": portfolio_id,
+                "ticker": ticker.upper(),
+                "tipo": tipo,
+                "metadata": metadata,
+                "updated_at": datetime_now_iso()
+            }
+            res = self.supabase.table('portafolio_instrumento_subportafolios').upsert(
+                upsert_data,
+                on_conflict='portafolio_id,ticker'
+            ).execute()
+            
+            return {"success": True, "message": "Sub-portafolio guardado correctamente."}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def delete_instrument_sub_portfolio(self, portfolio_id: str, user_id: str, ticker: str) -> Dict[str, Any]:
+        """
+        Elimina la configuración del sub-portafolio de un instrumento.
+        """
+        try:
+            # 1. Validar propiedad del portafolio
+            port_res = self.supabase.table('portafolios').select('id, user_id').eq('id', portfolio_id).execute()
+            if not port_res.data:
+                return {"success": False, "error": "Portafolio no encontrado"}
+            if str(port_res.data[0]['user_id']) != str(user_id):
+                return {"success": False, "error": "Acceso no autorizado"}
+
+            # 2. Delete
+            self.supabase.table('portafolio_instrumento_subportafolios').delete().eq('portafolio_id', portfolio_id).eq('ticker', ticker.upper()).execute()
+            
+            return {"success": True, "message": "Sub-portafolio eliminado correctamente."}
         except Exception as e:
             return {"success": False, "error": str(e)}
 

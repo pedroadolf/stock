@@ -24,6 +24,12 @@ class InstrumentTargetRequest(BaseModel):
     ticker: str
     porcentaje_objetivo: float
 
+class InstrumentSubPortfolioRequest(BaseModel):
+    portfolio_id: str
+    ticker: str
+    tipo: str
+    metadata: Dict[str, Any]
+
 class CalculateRebalanceRequest(BaseModel):
     portfolio_id: str
     amount: float
@@ -312,4 +318,57 @@ def get_ticker_details_endpoint(
     result = handler.get_ticker_details(ticker)
     if not result.get("success"):
         raise HTTPException(status_code=400, detail=result.get("error"))
+    return result
+
+
+@router.post("/instrument-sub-portfolio")
+def save_instrument_sub_portfolio_endpoint(
+    payload: InstrumentSubPortfolioRequest,
+    user_id: Optional[str] = Header(None, alias="User-ID", description="El ID del usuario propietario"),
+    supabase_client = Depends(get_supabase_client)
+):
+    """
+    Guarda o actualiza la configuración del sub-portafolio de un instrumento.
+    """
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Header 'User-ID' es requerido para aislamiento de inquilinos")
+        
+    handler = MCPRequestHandler(supabase_client)
+    result = handler.save_instrument_sub_portfolio(
+        portfolio_id=payload.portfolio_id,
+        user_id=user_id,
+        ticker=payload.ticker,
+        tipo=payload.tipo,
+        metadata=payload.metadata
+    )
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error"))
+        
+    return result
+
+
+@router.delete("/instrument-sub-portfolio")
+def delete_instrument_sub_portfolio_endpoint(
+    portfolio_id: str = Query(..., description="ID del portafolio"),
+    ticker: str = Query(..., description="Ticker del instrumento"),
+    user_id: Optional[str] = Header(None, alias="User-ID", description="El ID del usuario propietario"),
+    supabase_client = Depends(get_supabase_client)
+):
+    """
+    Elimina la configuración del sub-portafolio de un instrumento.
+    """
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Header 'User-ID' es requerido para aislamiento de inquilinos")
+        
+    handler = MCPRequestHandler(supabase_client)
+    result = handler.delete_instrument_sub_portfolio(
+        portfolio_id=portfolio_id,
+        user_id=user_id,
+        ticker=ticker
+    )
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error"))
+        
     return result
