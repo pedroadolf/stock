@@ -1,17 +1,21 @@
 -- ==============================================================================
--- 📊 PORTFOLIFY EXTENSION - INSTRUMENT LEVEL SUB-PORTFOLIOS
+-- 📊 PORTFOLIFY EXTENSION - INSTRUMENT LEVEL SUB-PORTFOLIOS & OWNERSHIP
 -- ==============================================================================
 
--- 1. CREACIÓN DE LA TABLA DE SUB-PORTAFOLIOS POR INSTRUMENTO
+-- 1. ALTERACIÓN DE LA TABLA DE OPERACIONES PARA PROPIETARIOS
+ALTER TABLE public.operaciones ADD COLUMN IF NOT EXISTS propietario TEXT DEFAULT 'Pash';
+
+-- 2. CREACIÓN DE LA TABLA DE SUB-PORTAFOLIOS POR INSTRUMENTO Y PROPIETARIO
 CREATE TABLE IF NOT EXISTS public.portafolio_instrumento_subportafolios (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     portafolio_id UUID NOT NULL REFERENCES public.portafolios(id) ON DELETE CASCADE,
     ticker TEXT NOT NULL,
+    propietario TEXT NOT NULL DEFAULT 'Pash',
     tipo TEXT NOT NULL CHECK (tipo IN ('porcentajes', 'ahorro')),
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now(),
-    CONSTRAINT unique_subportfolio_per_ticker UNIQUE(portafolio_id, ticker)
+    CONSTRAINT unique_subportfolio_per_ticker_owner UNIQUE(portafolio_id, ticker, propietario)
 );
 
 -- Habilitar timestamp auto-update para portafolio_instrumento_subportafolios
@@ -20,10 +24,10 @@ CREATE TRIGGER trigger_update_timestamp
     BEFORE UPDATE ON public.portafolio_instrumento_subportafolios 
     FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
--- 2. HABILITAR SEGURIDAD RLS
+-- 3. HABILITAR SEGURIDAD RLS
 ALTER TABLE public.portafolio_instrumento_subportafolios ENABLE ROW LEVEL SECURITY;
 
--- 3. POLÍTICAS RLS PARA PORTAFOLIO_INSTRUMENTO_SUBPORTAFOLIOS (Aislamiento por User ID)
+-- 4. POLÍTICAS RLS PARA PORTAFOLIO_INSTRUMENTO_SUBPORTAFOLIOS (Aislamiento por User ID)
 DROP POLICY IF EXISTS "Allow select for owners" ON public.portafolio_instrumento_subportafolios;
 CREATE POLICY "Allow select for owners" ON public.portafolio_instrumento_subportafolios
     FOR SELECT USING (

@@ -232,7 +232,7 @@ class MCPRequestHandler:
             return {"success": False, "error": str(e)}
 
 
-    def execute_simulate_buy(self, portfolio_id: str, user_id: str, ticker: str, cantidad: float, seccion: str, valor_actual_manual: Optional[float] = None, porcentaje_objetivo_instrumento: Optional[float] = None) -> Dict[str, Any]:
+    def execute_simulate_buy(self, portfolio_id: str, user_id: str, ticker: str, cantidad: float, seccion: str, valor_actual_manual: Optional[float] = None, porcentaje_objetivo_instrumento: Optional[float] = None, propietario: Optional[str] = 'Pash') -> Dict[str, Any]:
         """
         Ejecuta la compra simulada de un activo validando fondos disponibles del portafolio.
         """
@@ -288,7 +288,8 @@ class MCPRequestHandler:
                 "comision": float(comision),
                 "seccion": seccion,
                 "valor_actual_manual": float(valor_actual_manual) if is_manual else None,
-                "broker": "Yahoo Finance" if not is_manual else "Manual"
+                "broker": "Yahoo Finance" if not is_manual else "Manual",
+                "propietario": propietario or 'Pash'
             }
             op_res = self.supabase.table('operaciones').insert(op_data).execute()
             if not op_res.data:
@@ -439,7 +440,7 @@ class MCPRequestHandler:
                         cash_balance -= monto
                         
             # 4. Calcular posiciones agrupadas de activos
-            # Holdings structure: { ticker: { "cantidad": Decimal, "seccion": str, "costo_total": Decimal, "valor_actual_manual": Optional } }
+            # Holdings structure: { key: { "ticker": str, "propietario": str, "cantidad": Decimal, "seccion": str, "costo_total": Decimal, "valor_actual_manual": Optional } }
             holdings = {}
             for op in operaciones:
                 ticker = op['ticker']
@@ -451,10 +452,14 @@ class MCPRequestHandler:
                 comision = Decimal(str(op['comision']))
                 seccion = op['seccion'] or "Sin Categoría"
                 val_manual = op['valor_actual_manual']
+                propietario = op.get('propietario') or 'Pash'
                 
-                if ticker not in holdings:
-                    holdings[ticker] = {
+                key = f"{ticker}_{propietario}"
+                
+                if key not in holdings:
+                    holdings[key] = {
                         "ticker": ticker,
+                        "propietario": propietario,
                         "cantidad": Decimal("0.00"),
                         "costo_total": Decimal("0.00"),
                         "seccion": seccion,
@@ -462,23 +467,24 @@ class MCPRequestHandler:
                     }
                     
                 if tipo == 'compra':
-                    holdings[ticker]["cantidad"] += cantidad
-                    holdings[ticker]["costo_total"] += (cantidad * precio) + comision
+                    holdings[key]["cantidad"] += cantidad
+                    holdings[key]["costo_total"] += (cantidad * precio) + comision
                 elif tipo == 'venta':
-                    holdings[ticker]["cantidad"] -= cantidad
-                    # Reducción proporcional del costo promedio
-                    holdings[ticker]["costo_total"] -= cantidad * precio
+                    holdings[key]["cantidad"] -= cantidad
+                    holdings[key]["costo_total"] -= cantidad * precio
                     
                 # El valor manual más reciente pisa los anteriores
                 if val_manual is not None:
-                    holdings[ticker]["valor_actual_manual"] = Decimal(str(val_manual))
+                    holdings[key]["valor_actual_manual"] = Decimal(str(val_manual))
                     
             # Filtrar holdings con cantidad cero
             active_holdings = []
             assets_total_value = Decimal("0.00")
             
-            for ticker, hold in holdings.items():
+            for key, hold in holdings.items():
                 if hold["cantidad"] > Decimal("0.0001"):
+                    ticker = hold["ticker"]
+                    propietario = hold["propietario"]
                     # Valuar posición
                     is_manual = hold["valor_actual_manual"] is not None
                     if is_manual:
@@ -499,6 +505,7 @@ class MCPRequestHandler:
                     
                     active_holdings.append({
                         "ticker": ticker,
+                        "propietario": propietario,
                         "nombre": nombre,
                         "origen": origen,
                         "seccion": hold["seccion"],
@@ -547,6 +554,7 @@ class MCPRequestHandler:
                     "id": op['id'],
                     "fecha_adquisicion": op['created_at'],
                     "ticker": tk,
+                    "propietario": op.get('propietario') or 'Pash',
                     "nombre": names_map.get(tk, f"Activo {tk}"),
                     "origen": get_ticker_region(tk),
                     "seccion": op['seccion'] or "Sin Categoría",
@@ -599,17 +607,18 @@ class MCPRequestHandler:
             except Exception as e:
                 print(f"⚠️ Warning: portafolio_instrumentos_objetivo query failed (migration might not be applied yet): {str(e)}")
                 inst_target_map = {}
-
+ 
             # 7. Obtener sub-portafolios de instrumentos
             try:
                 subport_res = self.supabase.table('portafolio_instrumento_subportafolios').select('*').eq('portafolio_id', portfolio_id).execute()
-                subport_map = {item['ticker']: {"tipo": item['tipo'], "metadata": item['metadata']} for item in subport_res.data} if subport_res.data else {}
+                subport_map = {f"{item['ticker']}_{item.get('propietario', 'Pash')}": {"tipo": item['tipo'], "metadata": item['metadata']} for item in subport_res.data} if subport_res.data else {}
             except Exception as e:
                 print(f"⚠️ Warning: portafolio_instrumento_subportafolios query failed: {str(e)}")
                 subport_map = {}
-
+ 
             for hold in active_holdings:
                 ticker = hold["ticker"]
+                propietario = hold["propietario"]
                 sec = hold["seccion"]
                 
                 # Objetivo de la clase (e.g. 5%)
@@ -641,7 +650,7 @@ class MCPRequestHandler:
                 hold["porcentaje_real_clase"] = inst_actual_pct_clase
                 hold["porcentaje_real_total"] = inst_actual_pct_total
                 hold["desviacion_valor"] = desviacion_valor
-                hold["sub_portafolio"] = subport_map.get(ticker, None)
+                hold["sub_portafolio"] = subport_map.get(f"{ticker}_{propietario}", None)
             
             return {
                 "success": True,
@@ -693,7 +702,7 @@ class MCPRequestHandler:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def save_instrument_sub_portfolio(self, portfolio_id: str, user_id: str, ticker: str, tipo: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    def save_instrument_sub_portfolio(self, portfolio_id: str, user_id: str, ticker: str, tipo: str, metadata: Dict[str, Any], propietario: str = 'Pash') -> Dict[str, Any]:
         """
         Guarda o actualiza la configuración del sub-portafolio de un instrumento.
         """
@@ -709,20 +718,21 @@ class MCPRequestHandler:
             upsert_data = {
                 "portafolio_id": portfolio_id,
                 "ticker": ticker.upper(),
+                "propietario": propietario,
                 "tipo": tipo,
                 "metadata": metadata,
                 "updated_at": datetime_now_iso()
             }
             res = self.supabase.table('portafolio_instrumento_subportafolios').upsert(
                 upsert_data,
-                on_conflict='portafolio_id,ticker'
+                on_conflict='portafolio_id,ticker,propietario'
             ).execute()
             
             return {"success": True, "message": "Sub-portafolio guardado correctamente."}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def delete_instrument_sub_portfolio(self, portfolio_id: str, user_id: str, ticker: str) -> Dict[str, Any]:
+    def delete_instrument_sub_portfolio(self, portfolio_id: str, user_id: str, ticker: str, propietario: str = 'Pash') -> Dict[str, Any]:
         """
         Elimina la configuración del sub-portafolio de un instrumento.
         """
@@ -735,7 +745,7 @@ class MCPRequestHandler:
                 return {"success": False, "error": "Acceso no autorizado"}
 
             # 2. Delete
-            self.supabase.table('portafolio_instrumento_subportafolios').delete().eq('portafolio_id', portfolio_id).eq('ticker', ticker.upper()).execute()
+            self.supabase.table('portafolio_instrumento_subportafolios').delete().eq('portafolio_id', portfolio_id).eq('ticker', ticker.upper()).eq('propietario', propietario).execute()
             
             return {"success": True, "message": "Sub-portafolio eliminado correctamente."}
         except Exception as e:

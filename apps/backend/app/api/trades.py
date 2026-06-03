@@ -17,6 +17,7 @@ class SimulateBuyRequest(BaseModel):
     seccion: str
     valor_actual_manual: Optional[float] = None
     porcentaje_objetivo_instrumento: Optional[float] = None
+    propietario: Optional[str] = "Pash"
 
 class InstrumentTargetRequest(BaseModel):
     portfolio_id: str
@@ -29,6 +30,7 @@ class InstrumentSubPortfolioRequest(BaseModel):
     ticker: str
     tipo: str
     metadata: Dict[str, Any]
+    propietario: Optional[str] = "Pash"
 
 class CalculateRebalanceRequest(BaseModel):
     portfolio_id: str
@@ -152,7 +154,8 @@ def simulate_buy_endpoint(
         cantidad=payload.cantidad,
         seccion=payload.seccion,
         valor_actual_manual=payload.valor_actual_manual,
-        porcentaje_objetivo_instrumento=payload.porcentaje_objetivo_instrumento
+        porcentaje_objetivo_instrumento=payload.porcentaje_objetivo_instrumento,
+        propietario=payload.propietario
     )
     
     if not result.get("success"):
@@ -339,7 +342,8 @@ def save_instrument_sub_portfolio_endpoint(
         user_id=user_id,
         ticker=payload.ticker,
         tipo=payload.tipo,
-        metadata=payload.metadata
+        metadata=payload.metadata,
+        propietario=payload.propietario or "Pash"
     )
     
     if not result.get("success"):
@@ -352,6 +356,7 @@ def save_instrument_sub_portfolio_endpoint(
 def delete_instrument_sub_portfolio_endpoint(
     portfolio_id: str = Query(..., description="ID del portafolio"),
     ticker: str = Query(..., description="Ticker del instrumento"),
+    propietario: str = Query("Pash", description="Propietario del instrumento"),
     user_id: Optional[str] = Header(None, alias="User-ID", description="El ID del usuario propietario"),
     supabase_client = Depends(get_supabase_client)
 ):
@@ -365,7 +370,8 @@ def delete_instrument_sub_portfolio_endpoint(
     result = handler.delete_instrument_sub_portfolio(
         portfolio_id=portfolio_id,
         user_id=user_id,
-        ticker=ticker
+        ticker=ticker,
+        propietario=propietario
     )
     
     if not result.get("success"):

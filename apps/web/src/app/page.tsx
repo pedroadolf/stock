@@ -150,7 +150,7 @@ export default function DashboardPage() {
 
   // Estados para sub-portafolios de instrumentos
   const [expandedSubPortfolios, setExpandedSubPortfolios] = useState<Record<string, boolean>>({});
-  const [configuringSubPortfolio, setConfiguringSubPortfolio] = useState<{ ticker: string; seccion: string } | null>(null);
+  const [configuringSubPortfolio, setConfiguringSubPortfolio] = useState<{ ticker: string; seccion: string; propietario: string } | null>(null);
   const [subPortfolioType, setSubPortfolioType] = useState<'porcentajes' | 'ahorro'>('porcentajes');
   const [subPortfolioItems, setSubPortfolioItems] = useState<Array<{ ticker: string; porcentaje: number }>>([]);
   const [subPortfolioAhorro, setSubPortfolioAhorro] = useState({
@@ -160,6 +160,10 @@ export default function DashboardPage() {
     moneda: "USD"
   });
   const [savingSubPortfolio, setSavingSubPortfolio] = useState(false);
+
+  // Filtros de dueño / propietario
+  const [propietarioFilter, setPropietarioFilter] = useState<string>("Todos");
+  const [propietarioBuy, setPropietarioBuy] = useState<string>("Pash");
 
   // Carga inicial y listeners
   useEffect(() => {
@@ -223,12 +227,13 @@ export default function DashboardPage() {
     localStorage.setItem('theme', nextTheme);
   };
 
-  const toggleSubPortfolioExpand = (ticker: string) => {
-    setExpandedSubPortfolios(prev => ({ ...prev, [ticker]: !prev[ticker] }));
+  const toggleSubPortfolioExpand = (ticker: string, propietario: string) => {
+    const key = `${ticker}_${propietario}`;
+    setExpandedSubPortfolios(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const startConfigureSubPortfolio = (ticker: string, seccion: string, existingSubPortfolio?: any) => {
-    setConfiguringSubPortfolio({ ticker, seccion });
+  const startConfigureSubPortfolio = (ticker: string, seccion: string, propietario: string, existingSubPortfolio?: any) => {
+    setConfiguringSubPortfolio({ ticker, seccion, propietario });
     if (existingSubPortfolio) {
       setSubPortfolioType(existingSubPortfolio.tipo);
       if (existingSubPortfolio.tipo === 'porcentajes') {
@@ -281,7 +286,7 @@ export default function DashboardPage() {
     if (!configuringSubPortfolio || !selectedPortfolioId || !userId) return;
     setSavingSubPortfolio(true);
     try {
-      const { ticker } = configuringSubPortfolio;
+      const { ticker, propietario } = configuringSubPortfolio;
       let metadata: any = {};
       
       if (subPortfolioType === 'porcentajes') {
@@ -320,12 +325,14 @@ export default function DashboardPage() {
         userId,
         ticker,
         subPortfolioType,
-        metadata
+        metadata,
+        propietario
       );
       
       if (res.success) {
         setConfiguringSubPortfolio(null);
-        setExpandedSubPortfolios(prev => ({ ...prev, [ticker]: true }));
+        const key = `${ticker}_${propietario}`;
+        setExpandedSubPortfolios(prev => ({ ...prev, [key]: true }));
         await refreshPortfolioStatus(selectedPortfolioId, userId);
       } else {
         alert("Error al guardar sub-portafolio.");
@@ -337,16 +344,17 @@ export default function DashboardPage() {
     }
   };
 
-  const handleDeleteSubPortfolio = async (ticker: string) => {
+  const handleDeleteSubPortfolio = async (ticker: string, propietario: string) => {
     if (!selectedPortfolioId || !userId) return;
-    if (!confirm(`¿Estás seguro de eliminar la configuración del portafolio para ${ticker}?`)) return;
+    if (!confirm(`¿Estás seguro de eliminar la configuración del portafolio para ${ticker} (${propietario})?`)) return;
     
     try {
-      const res = await backendApi.deleteInstrumentSubPortfolio(selectedPortfolioId, userId, ticker);
+      const res = await backendApi.deleteInstrumentSubPortfolio(selectedPortfolioId, userId, ticker, propietario);
       if (res.success) {
+        const key = `${ticker}_${propietario}`;
         setExpandedSubPortfolios(prev => {
           const next = { ...prev };
-          delete next[ticker];
+          delete next[key];
           return next;
         });
         await refreshPortfolioStatus(selectedPortfolioId, userId);
@@ -507,6 +515,7 @@ export default function DashboardPage() {
     setBuyError(null);
     setBuyEtfInfo(null);
     setPorcentajeObjetivoInstrumento("");
+    setPropietarioBuy("Pash");
   };
 
   const handleOpenBuyModal = () => {
@@ -568,7 +577,8 @@ export default function DashboardPage() {
         cantFloat,
         seccion,
         customPrice,
-        objVal
+        objVal,
+        propietarioBuy
       );
 
       if (result.success) {
@@ -795,8 +805,44 @@ export default function DashboardPage() {
     );
   }
 
+  // 1. Filtrar holdings por propietario
+  const filteredHoldings = (status?.holdings || []).filter((h: any) => 
+    propietarioFilter === "Todos" || h.propietario === propietarioFilter
+  );
+
+  // 2. Calcular valores consolidados según el propietario
+  const displayCash = propietarioFilter === "Todos" ? (status?.cash_balance || 0) : 0;
+  const displayAssetsValue = filteredHoldings.reduce((sum: number, h: any) => sum + (h.valor_actual || 0), 0);
+  const displayTotalValue = propietarioFilter === "Todos" ? (status?.total_value || 0) : displayAssetsValue;
+
+  const displayPnL = filteredHoldings.reduce((sum: number, h: any) => sum + (h.pnl || 0), 0);
+  const displayCostTotal = filteredHoldings.reduce((sum: number, h: any) => sum + (h.costo_total || 0), 0);
+  const displayPnLPercent = displayCostTotal > 0 ? (displayPnL / displayCostTotal) * 100 : 0;
+
+  // 3. Recalcular secciones (Distribución del Plan)
+  const displaySecciones = (status?.secciones || []).map((sec: any) => {
+    const secHoldings = filteredHoldings.filter((h: any) => h.seccion === sec.nombre_seccion);
+    const valActual = secHoldings.reduce((sum: number, h: any) => sum + (h.valor_actual || 0), 0);
+    const pctReal = displayTotalValue > 0 ? (valActual / displayTotalValue) * 100 : 0;
+    return {
+      ...sec,
+      valor_actual: valActual,
+      porcentaje_real: pctReal
+    };
+  });
+
+  // 4. Filtrar y recalcular peso de lotes
+  const rawLots = (status?.lots || []).filter((lot: any) =>
+    propietarioFilter === "Todos" || lot.propietario === propietarioFilter
+  );
+  
+  const displayLots = rawLots.map((lot: any) => ({
+    ...lot,
+    peso_portafolio: displayTotalValue > 0 ? (lot.valor_actual / displayTotalValue) * 100 : 0
+  }));
+
   // Filtrado de lotes para la Pestaña 2
-  const filteredLots = (status?.lots || []).filter((lot: any) => {
+  const filteredLots = displayLots.filter((lot: any) => {
     const matchesText = lot.ticker.toLowerCase().includes(posFilterText.toLowerCase()) || 
                         lot.nombre.toLowerCase().includes(posFilterText.toLowerCase());
     const matchesSection = posFilterSection === "" || lot.seccion === posFilterSection;
@@ -819,7 +865,7 @@ export default function DashboardPage() {
   });
 
   // Preparar datos para el gráfico de torta de Recharts
-  const pieData = (status?.secciones || [])
+  const pieData = displaySecciones
     .filter((sec: any) => sec.valor_actual > 0)
     .map((sec: any, idx: number) => ({
       name: sec.nombre_seccion,
@@ -938,6 +984,22 @@ export default function DashboardPage() {
           {/* Opciones del Header */}
           <div className="flex items-center gap-3">
             
+            {/* Selector de Propietario */}
+            <div className="flex items-center gap-2 bg-[#111827] [data-theme='light']:bg-white border border-gray-800 [data-theme='light']:border-gray-300 rounded-xl px-3 py-1.5 text-xs text-white [data-theme='light']:text-gray-900">
+              <span className="text-gray-500 font-bold uppercase tracking-wider text-[10px]">Dueño:</span>
+              <select
+                value={propietarioFilter}
+                onChange={(e) => setPropietarioFilter(e.target.value)}
+                className="bg-transparent border-none text-white [data-theme='light']:text-gray-900 font-bold focus:outline-none cursor-pointer"
+              >
+                <option value="Todos" className="bg-slate-900 text-white [data-theme='light']:bg-white [data-theme='light']:text-gray-900">Todos</option>
+                <option value="Chari" className="bg-slate-900 text-white [data-theme='light']:bg-white [data-theme='light']:text-gray-900">Chari</option>
+                <option value="Milio" className="bg-slate-900 text-white [data-theme='light']:bg-white [data-theme='light']:text-gray-900">Milio</option>
+                <option value="Pash" className="bg-slate-900 text-white [data-theme='light']:bg-white [data-theme='light']:text-gray-900">Pash</option>
+                <option value="Otro" className="bg-slate-900 text-white [data-theme='light']:bg-white [data-theme='light']:text-gray-900">Otro</option>
+              </select>
+            </div>
+
             {/* Ticker Search Bar */}
             <form onSubmit={handleResearchSearch} className="relative max-w-xs w-full hidden md:block">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-500" />
@@ -987,7 +1049,7 @@ export default function DashboardPage() {
             <div>
               <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Valor Total Portafolio</span>
               <h3 className="text-xl font-black font-mono mt-1 text-white [data-theme='light']:text-gray-900">
-                ${status?.total_value?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"} {status?.moneda || 'USD'}
+                ${displayTotalValue?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"} {status?.moneda || 'USD'}
               </h3>
             </div>
           </div>
@@ -1000,20 +1062,20 @@ export default function DashboardPage() {
             <div>
               <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Efectivo Disponible (Cash)</span>
               <h3 className="text-xl font-black font-mono mt-1 text-white [data-theme='light']:text-gray-900">
-                ${status?.cash_balance?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"} {status?.moneda || 'USD'}
+                ${displayCash?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"} {status?.moneda || 'USD'}
               </h3>
             </div>
           </div>
 
           {/* Caja 3: Ganancia Absoluta */}
           <div className="gostock-box p-5 flex items-center gap-4 relative overflow-hidden">
-            <div className={`p-3.5 rounded-2xl border ${status?.total_pnl >= 0 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-red-500/10 border-red-500/20 text-red-400"}`}>
-              {status?.total_pnl >= 0 ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
+            <div className={`p-3.5 rounded-2xl border ${displayPnL >= 0 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-red-500/10 border-red-500/20 text-red-400"}`}>
+              {displayPnL >= 0 ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
             </div>
             <div>
               <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Ganancia / Pérdida</span>
-              <h3 className={`text-xl font-black font-mono mt-1 ${status?.total_pnl >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                {status?.total_pnl >= 0 ? "+" : ""}${status?.total_pnl?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"} {status?.moneda || 'USD'}
+              <h3 className={`text-xl font-black font-mono mt-1 ${displayPnL >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                {displayPnL >= 0 ? "+" : ""}${displayPnL?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || "0.00"} {status?.moneda || 'USD'}
               </h3>
             </div>
           </div>
@@ -1026,7 +1088,7 @@ export default function DashboardPage() {
             <div>
               <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider block">Monto Invertido</span>
               <h3 className={`text-xl font-black font-mono mt-1 text-white [data-theme='light']:text-gray-900`}>
-                ${((status?.assets_value || 0) - (status?.total_pnl || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}
+                ${((displayAssetsValue || 0) - (displayPnL || 0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}
               </h3>
             </div>
           </div>
@@ -1051,21 +1113,21 @@ export default function DashboardPage() {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-gray-800 text-[10px] text-gray-500 font-bold uppercase tracking-wider">
-                        <th className="pb-3">Clase de Activo</th>
-                        <th className="pb-3 text-center">Objetivo (%)</th>
-                        <th className="pb-3 text-center">Actual (%)</th>
-                        <th className="pb-3 text-right">Inversión Actual</th>
-                        <th className="pb-3 text-right">Diferencia</th>
+                        <th className="pb-3 pl-8 text-white [data-theme='light']:text-gray-900">Clase de Activo</th>
+                        <th className="pb-3 text-center text-white [data-theme='light']:text-gray-900">Objetivo (%)</th>
+                        <th className="pb-3 text-center text-white [data-theme='light']:text-gray-900">Actual (%)</th>
+                        <th className="pb-3 text-right text-white [data-theme='light']:text-gray-900">Inversión Actual</th>
+                        <th className="pb-3 text-right text-white [data-theme='light']:text-gray-900">Diferencia</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-800/40 text-xs">
-                      {status?.secciones?.map((sec: any, idx: number) => {
-                        const diff = sec.valor_actual - (sec.porcentaje_objetivo / 100 * status.total_value);
+                      {displaySecciones?.map((sec: any, idx: number) => {
+                        const diff = sec.valor_actual - (sec.porcentaje_objetivo / 100 * displayTotalValue);
                         const isExpanded = expandedSections[sec.nombre_seccion];
                         
                         // Encontrar holdings de esta seccion y ordenarlos de mayor a menor por valor_actual
-                        const seccionHoldings = status?.holdings
-                          ? status.holdings
+                        const seccionHoldings = filteredHoldings
+                          ? filteredHoldings
                               .filter((h: any) => h.seccion === sec.nombre_seccion)
                               .sort((a: any, b: any) => b.valor_actual - a.valor_actual)
                           : [];
@@ -1093,17 +1155,23 @@ export default function DashboardPage() {
                             
                             {isExpanded && seccionHoldings.length > 0 && seccionHoldings.map((h: any) => {
                               const hasSubPortfolio = h.sub_portafolio !== null && h.sub_portafolio !== undefined;
-                              const isSubPortfolioExpanded = expandedSubPortfolios[h.ticker];
-                              const isConfiguringThis = configuringSubPortfolio?.ticker === h.ticker;
+                              const isSubPortfolioExpanded = expandedSubPortfolios[`${h.ticker}_${h.propietario}`];
+                              const isConfiguringThis = configuringSubPortfolio?.ticker === h.ticker && configuringSubPortfolio?.propietario === h.propietario;
+                              const editKey = `${h.ticker}_${h.propietario}`;
                               
                               return (
-                                <React.Fragment key={h.ticker}>
+                                <React.Fragment key={editKey}>
                                   <tr className="group bg-gray-900/25 hover:bg-gray-800/10 transition-colors border-t border-gray-800/20">
                                     {/* Col 1: Instrument Details */}
                                     <td className="py-2.5 pl-12">
                                       <div className="flex items-center gap-2">
                                         <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0"></span>
                                         <span className="font-bold text-amber-500 font-mono shrink-0">{h.ticker}</span>
+                                        {propietarioFilter === "Todos" && (
+                                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-[#111827] border border-gray-800 text-blue-400 font-mono uppercase">
+                                            {h.propietario}
+                                          </span>
+                                        )}
                                         <span className="text-gray-400 truncate max-w-[120px] [data-theme='light']:text-gray-600 font-medium" title={h.nombre}>
                                           {h.nombre}
                                         </span>
@@ -1116,7 +1184,7 @@ export default function DashboardPage() {
                                           <button
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              toggleSubPortfolioExpand(h.ticker);
+                                              toggleSubPortfolioExpand(h.ticker, h.propietario);
                                             }}
                                             className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded px-1.5 py-0.5 hover:bg-indigo-500/30 transition flex items-center gap-1 cursor-pointer"
                                             title="Ver portafolio de este instrumento"
@@ -1128,7 +1196,7 @@ export default function DashboardPage() {
                                           <button
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              startConfigureSubPortfolio(h.ticker, h.seccion);
+                                              startConfigureSubPortfolio(h.ticker, h.seccion, h.propietario);
                                             }}
                                             className="text-[9px] opacity-0 group-hover:opacity-100 hover:opacity-100 bg-gray-800/80 text-gray-400 border border-gray-700/60 rounded px-1.5 py-0.5 hover:text-white transition flex items-center gap-1 cursor-pointer"
                                           >
@@ -1141,7 +1209,7 @@ export default function DashboardPage() {
                                     
                                     {/* Col 2: Target % (Editable) */}
                                     <td className="py-2.5 text-center font-mono select-none">
-                                      {editingTicker === h.ticker ? (
+                                      {editingTicker === editKey ? (
                                         <input
                                           type="number"
                                           value={editValue}
@@ -1162,7 +1230,7 @@ export default function DashboardPage() {
                                           className="group inline-flex items-center justify-center gap-1 cursor-pointer hover:bg-gray-800/60 px-2 py-0.5 rounded transition"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            setEditingTicker(h.ticker);
+                                            setEditingTicker(editKey);
                                             setEditValue((h.porcentaje_objetivo_clase || 0).toString());
                                           }}
                                         >
@@ -1197,7 +1265,7 @@ export default function DashboardPage() {
                                         <div className="bg-[#111827] border border-gray-800 rounded-2xl p-5 space-y-4">
                                           <div className="flex justify-between items-center pb-2 border-b border-gray-800">
                                             <h4 className="text-xs font-black uppercase text-amber-500 tracking-wider">
-                                              Configurar Portafolio para {h.ticker}
+                                              Configurar Portafolio para {h.ticker} ({h.propietario})
                                             </h4>
                                             <div className="flex gap-2">
                                               <button 
@@ -1339,17 +1407,17 @@ export default function DashboardPage() {
                                         <div className="bg-slate-900/30 border border-gray-800/60 rounded-xl p-4 space-y-3">
                                           <div className="flex justify-between items-center">
                                             <span className="text-[10px] text-gray-500 font-black uppercase tracking-wider">
-                                              Composición de Portafolio: {h.ticker}
+                                              Composición de Portafolio: {h.ticker} ({h.propietario})
                                             </span>
                                             <div className="flex gap-2">
                                               <button 
-                                                onClick={() => startConfigureSubPortfolio(h.ticker, h.seccion, h.sub_portafolio)}
+                                                onClick={() => startConfigureSubPortfolio(h.ticker, h.seccion, h.propietario, h.sub_portafolio)}
                                                 className="text-[9px] text-amber-500 hover:text-amber-400 font-bold uppercase flex items-center gap-1"
                                               >
                                                 <Edit2 className="w-3 h-3" /> Editar
                                               </button>
                                               <button 
-                                                onClick={() => handleDeleteSubPortfolio(h.ticker)}
+                                                onClick={() => handleDeleteSubPortfolio(h.ticker, h.propietario)}
                                                 className="text-[9px] text-red-500/80 hover:text-red-500 font-bold uppercase flex items-center gap-1"
                                               >
                                                 <Trash2 className="w-3 h-3" /> Eliminar
@@ -1380,6 +1448,21 @@ export default function DashboardPage() {
                                                       </tr>
                                                     );
                                                   })}
+                                                  {/* Fila de Totales de Sub-portafolio */}
+                                                  {h.sub_portafolio.metadata?.valores?.length > 0 && (() => {
+                                                    const subP = h.sub_portafolio.metadata.valores;
+                                                    const totalPct = subP.reduce((sum: number, vi: any) => sum + (vi.porcentaje || 0), 0);
+                                                    const totalVal = subP.reduce((sum: number, vi: any) => sum + ((vi.porcentaje / 100) * h.valor_actual), 0);
+                                                    return (
+                                                      <tr className="border-t border-gray-700 bg-gray-950/30 font-bold">
+                                                        <td className="py-2 px-3 text-white [data-theme='light']:text-gray-900 uppercase">Total</td>
+                                                        <td className="py-2 px-3 text-center text-gray-300">{totalPct.toFixed(1)}%</td>
+                                                        <td className="py-2 px-3 text-right text-white">
+                                                          ${totalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}
+                                                        </td>
+                                                      </tr>
+                                                    );
+                                                  })()}
                                                 </tbody>
                                               </table>
                                             </div>
@@ -1411,6 +1494,25 @@ export default function DashboardPage() {
                               );
                             })}
                             
+                            {/* Fila de Totales de la Clase */}
+                            {isExpanded && seccionHoldings.length > 0 && (() => {
+                              const totalClassTargetObj = seccionHoldings.reduce((sum: number, sh: any) => sum + (sh.porcentaje_objetivo_clase || 0), 0);
+                              const totalClassRealObj = seccionHoldings.reduce((sum: number, sh: any) => sum + (sh.porcentaje_real_clase || 0), 0);
+                              const totalClassValActual = seccionHoldings.reduce((sum: number, sh: any) => sum + (sh.valor_actual || 0), 0);
+                              const totalClassDesviacion = seccionHoldings.reduce((sum: number, sh: any) => sum + (sh.desviacion_valor || 0), 0);
+                              return (
+                                <tr className="bg-gray-800/10 border-t border-b-2 border-gray-700/80 font-bold">
+                                  <td className="py-2.5 pl-12 text-white [data-theme='light']:text-gray-900 font-extrabold uppercase">Total Clase</td>
+                                  <td className="py-2.5 text-center font-mono text-gray-300">{totalClassTargetObj.toFixed(1)}%</td>
+                                  <td className="py-2.5 text-center font-mono text-gray-300">{totalClassRealObj.toFixed(1)}%</td>
+                                  <td className="py-2.5 text-right font-mono text-white [data-theme='light']:text-gray-900">${totalClassValActual.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
+                                  <td className={`py-2.5 text-right font-mono ${totalClassDesviacion >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                                    {totalClassDesviacion >= 0 ? "+" : ""}${totalClassDesviacion.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}
+                                  </td>
+                                </tr>
+                              );
+                            })()}
+
                             {/* Alerta si la suma de los objetivos de la clase no es 100% */}
                             {isExpanded && seccionHoldings.length > 0 && (() => {
                               const sumTargets = seccionHoldings.reduce((sum: number, sh: any) => sum + (sh.porcentaje_objetivo_clase || 0), 0);
@@ -1439,6 +1541,24 @@ export default function DashboardPage() {
                           </React.Fragment>
                         );
                       })}
+                      {/* Fila de Totales de la Tabla Principal */}
+                      {displaySecciones.length > 0 && (() => {
+                        const totalObjetivo = displaySecciones.reduce((sum: number, s: any) => sum + (s.porcentaje_objetivo || 0), 0);
+                        const totalReal = displaySecciones.reduce((sum: number, s: any) => sum + (s.porcentaje_real || 0), 0);
+                        const totalActual = displaySecciones.reduce((sum: number, s: any) => sum + (s.valor_actual || 0), 0);
+                        const totalDiff = totalActual - (totalObjetivo / 100 * displayTotalValue);
+                        return (
+                          <tr className="border-t-2 border-gray-700 bg-gray-900/50 font-bold">
+                            <td className="py-4 pl-8 text-white [data-theme='light']:text-gray-900 font-extrabold uppercase">Total</td>
+                            <td className="py-4 text-center font-mono text-gray-300">{totalObjetivo.toFixed(1)}%</td>
+                            <td className="py-4 text-center font-mono text-gray-300">{totalReal.toFixed(1)}%</td>
+                            <td className="py-4 text-right font-mono text-white [data-theme='light']:text-gray-900">${totalActual.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
+                            <td className={`py-4 text-right font-mono ${totalDiff >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                              {totalDiff >= 0 ? "+" : ""}${totalDiff.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}
+                            </td>
+                          </tr>
+                        );
+                      })()}
                     </tbody>
                   </table>
                 </div>
@@ -1633,56 +1753,96 @@ export default function DashboardPage() {
                 <tbody className="divide-y divide-gray-800/40 text-xs">
                   {sortedLots.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="p-8 text-center text-gray-500">
+                      <td colSpan={13} className="p-8 text-center text-gray-500">
                         No se encontraron lotes de inversiones que coincidan con la búsqueda.
                       </td>
                     </tr>
                   ) : (
-                    sortedLots.map((lot: any) => {
-                      const isPos = lot.pnl >= 0;
-                      return (
-                        <tr key={lot.id} className="hover:bg-gray-800/10">
-                          <td className="p-3 text-center font-mono font-bold text-gray-400">
-                            {new Date(lot.fecha_adquisicion).toLocaleDateString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit' })}
-                          </td>
-                          <td className="p-3">
-                            <button 
-                              onClick={() => selectResearchTickerDirect(lot.ticker)}
-                              className="font-black text-amber-500 hover:underline cursor-pointer bg-transparent border-none text-left"
-                            >
-                              {lot.ticker}
-                            </button>
-                          </td>
-                          <td className="p-3 font-semibold text-white [data-theme='light']:text-gray-900 truncate max-w-[150px]">{lot.nombre}</td>
-                          <td className="p-3 text-center font-bold text-gray-500">{lot.origen}</td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-indigo-500/10 text-indigo-400">
-                              {lot.seccion}
-                            </span>
-                          </td>
-                          <td className="p-3 text-right font-mono text-gray-300">{lot.cantidad.toFixed(4)}</td>
-                          <td className="p-3 text-right font-mono text-gray-400">${lot.precio_compra.toFixed(2)} {status?.moneda || 'USD'}</td>
-                          <td className="p-3 text-right font-mono text-gray-400">${lot.precio_actual.toFixed(2)} {status?.moneda || 'USD'}</td>
-                          <td className="p-3 text-right font-mono text-white [data-theme='light']:text-gray-900">${lot.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
-                          <td className={`p-3 text-right font-mono font-bold ${isPos ? "text-emerald-500" : "text-red-500"}`}>
-                            {isPos ? "+" : ""}${lot.pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}
-                          </td>
-                          <td className={`p-3 text-right font-mono font-bold ${isPos ? "text-emerald-500" : "text-red-500"}`}>
-                            {isPos ? "+" : ""}{lot.pnl_percent.toFixed(2)}%
-                          </td>
-                          <td className="p-3 text-right font-mono font-bold text-gray-500">{lot.peso_portafolio.toFixed(2)}%</td>
-                          <td className="p-3 text-center">
-                            <button 
-                              onClick={() => handleDeleteOperation(lot.id)}
-                              className="text-red-500 hover:text-red-400 cursor-pointer p-1 rounded-md hover:bg-red-500/10 transition"
-                              title="Borrar lote de prueba"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
+                    <>
+                      {sortedLots.map((lot: any) => {
+                        const isPos = lot.pnl >= 0;
+                        return (
+                          <tr key={lot.id} className="hover:bg-gray-800/10">
+                            <td className="p-3 text-center font-mono font-bold text-gray-400">
+                              {new Date(lot.fecha_adquisicion).toLocaleDateString('es-MX', { year: 'numeric', month: '2-digit', day: '2-digit' })}
+                            </td>
+                            <td className="p-3">
+                              <div className="flex items-center gap-1.5">
+                                <button 
+                                  onClick={() => selectResearchTickerDirect(lot.ticker)}
+                                  className="font-black text-amber-500 hover:underline cursor-pointer bg-transparent border-none text-left"
+                                >
+                                  {lot.ticker}
+                                </button>
+                                {propietarioFilter === "Todos" && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#111827] border border-gray-800 text-blue-400 font-mono uppercase">
+                                    {lot.propietario}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-3 font-semibold text-white [data-theme='light']:text-gray-900 truncate max-w-[150px]">{lot.nombre}</td>
+                            <td className="p-3 text-center font-bold text-gray-500">{lot.origen}</td>
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-indigo-500/10 text-indigo-400">
+                                {lot.seccion}
+                              </span>
+                            </td>
+                            <td className="p-3 text-right font-mono text-gray-300">{lot.cantidad.toFixed(4)}</td>
+                            <td className="p-3 text-right font-mono text-gray-400">${lot.precio_compra.toFixed(2)} {status?.moneda || 'USD'}</td>
+                            <td className="p-3 text-right font-mono text-gray-400">${lot.precio_actual.toFixed(2)} {status?.moneda || 'USD'}</td>
+                            <td className="p-3 text-right font-mono text-white [data-theme='light']:text-gray-900">${lot.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
+                            <td className={`p-3 text-right font-mono font-bold ${isPos ? "text-emerald-500" : "text-red-500"}`}>
+                              {isPos ? "+" : ""}${lot.pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}
+                            </td>
+                            <td className={`p-3 text-right font-mono font-bold ${isPos ? "text-emerald-500" : "text-red-500"}`}>
+                              {isPos ? "+" : ""}{lot.pnl_percent.toFixed(2)}%
+                            </td>
+                            <td className="p-3 text-right font-mono font-bold text-gray-500">{lot.peso_portafolio.toFixed(2)}%</td>
+                            <td className="p-3 text-center">
+                              <button 
+                                onClick={() => handleDeleteOperation(lot.id)}
+                                className="text-red-500 hover:text-red-400 cursor-pointer p-1 rounded-md hover:bg-red-500/10 transition"
+                                title="Borrar lote de prueba"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      
+                      {/* Fila de Totales de Posiciones */}
+                      {(() => {
+                        const totalVal = sortedLots.reduce((sum: number, l: any) => sum + (l.valor_actual || 0), 0);
+                        const totalPnL = sortedLots.reduce((sum: number, l: any) => sum + (l.pnl || 0), 0);
+                        const totalCost = sortedLots.reduce((sum: number, l: any) => sum + (l.costo_total || 0), 0);
+                        const totalPnLPercent = totalCost > 0 ? (totalPnL / totalCost) * 100 : 0;
+                        const totalWeight = sortedLots.reduce((sum: number, l: any) => sum + (l.peso_portafolio || 0), 0);
+                        const isPos = totalPnL >= 0;
+                        return (
+                          <tr className="border-t-2 border-gray-700 bg-gray-950/60 font-bold">
+                            <td className="p-3 text-center text-white [data-theme='light']:text-gray-900 uppercase">Total</td>
+                            <td className="p-3"></td>
+                            <td className="p-3"></td>
+                            <td className="p-3"></td>
+                            <td className="p-3"></td>
+                            <td className="p-3"></td>
+                            <td className="p-3"></td>
+                            <td className="p-3"></td>
+                            <td className="p-3 text-right font-mono text-white [data-theme='light']:text-gray-900">${totalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
+                            <td className={`p-3 text-right font-mono ${isPos ? "text-emerald-500" : "text-red-500"}`}>
+                              {isPos ? "+" : ""}${totalPnL.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}
+                            </td>
+                            <td className={`p-3 text-right font-mono ${isPos ? "text-emerald-500" : "text-red-500"}`}>
+                              {isPos ? "+" : ""}{totalPnLPercent.toFixed(2)}%
+                            </td>
+                            <td className="p-3 text-right font-mono text-gray-300">{totalWeight.toFixed(2)}%</td>
+                            <td className="p-3"></td>
+                          </tr>
+                        );
+                      })()}
+                    </>
                   )}
                 </tbody>
               </table>
@@ -2283,6 +2443,17 @@ export default function DashboardPage() {
                         className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
                         min="0" max="100" step="0.1"
                       />
+                    </div>
+                    <div className="space-y-1 col-span-2 sm:col-span-1">
+                      <label className="text-xs font-bold text-amber-500 uppercase tracking-wide">Propietario</label>
+                      <select value={propietarioBuy} onChange={(e) => setPropietarioBuy(e.target.value)}
+                        className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500 transition cursor-pointer"
+                        required>
+                        <option value="Pash">Pash</option>
+                        <option value="Chari">Chari</option>
+                        <option value="Milio">Milio</option>
+                        <option value="Otro">Otro</option>
+                      </select>
                     </div>
                   </div>
 

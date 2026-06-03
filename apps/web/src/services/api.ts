@@ -137,7 +137,8 @@ export const backendApi = {
     cantidad: number,
     seccion: string,
     valorActualManual?: number,
-    porcentajeObjetivoInstrumento?: number
+    porcentajeObjetivoInstrumento?: number,
+    propietario?: string
   ): Promise<{
     success: boolean;
     operacion_id: string;
@@ -157,6 +158,7 @@ export const backendApi = {
         seccion,
         valor_actual_manual: valorActualManual,
         porcentaje_objetivo_instrumento: porcentajeObjetivoInstrumento,
+        propietario: propietario || 'Pash',
       }),
     });
   },
@@ -295,7 +297,8 @@ export const backendApi = {
     userId: string,
     ticker: string,
     tipo: 'porcentajes' | 'ahorro',
-    metadata: any
+    metadata: any,
+    propietario?: string
   ): Promise<{ success: boolean; message: string }> {
     return fetchFromBackend('/api/trades/instrument-sub-portfolio', {
       method: 'POST',
@@ -305,6 +308,7 @@ export const backendApi = {
         ticker,
         tipo,
         metadata,
+        propietario: propietario || 'Pash',
       }),
     });
   },
@@ -315,9 +319,11 @@ export const backendApi = {
   async deleteInstrumentSubPortfolio(
     portfolioId: string,
     userId: string,
-    ticker: string
+    ticker: string,
+    propietario?: string
   ): Promise<{ success: boolean; message: string }> {
-    return fetchFromBackend(`/api/trades/instrument-sub-portfolio?portfolio_id=${encodeURIComponent(portfolioId)}&ticker=${encodeURIComponent(ticker)}`, {
+    const ownerParam = propietario ? `&propietario=${encodeURIComponent(propietario)}` : '';
+    return fetchFromBackend(`/api/trades/instrument-sub-portfolio?portfolio_id=${encodeURIComponent(portfolioId)}&ticker=${encodeURIComponent(ticker)}${ownerParam}`, {
       method: 'DELETE',
       headers: { 'User-ID': userId },
     });
