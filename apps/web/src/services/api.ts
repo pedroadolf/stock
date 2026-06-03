@@ -138,7 +138,8 @@ export const backendApi = {
     seccion: string,
     valorActualManual?: number,
     porcentajeObjetivoInstrumento?: number,
-    propietario?: string
+    propietario?: string,
+    comisionAnual?: string
   ): Promise<{
     success: boolean;
     operacion_id: string;
@@ -159,6 +160,7 @@ export const backendApi = {
         valor_actual_manual: valorActualManual,
         porcentaje_objetivo_instrumento: porcentajeObjetivoInstrumento,
         propietario: propietario || 'Pash',
+        comision_anual: comisionAnual,
       }),
     });
   },

@@ -139,6 +139,7 @@ export default function DashboardPage() {
 
   // Estados para objetivo de instrumento y edición en caliente
   const [porcentajeObjetivoInstrumento, setPorcentajeObjetivoInstrumento] = useState("");
+  const [comisionAnualBuy, setComisionAnualBuy] = useState("");
   const [editingTicker, setEditingTicker] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
@@ -518,6 +519,7 @@ export default function DashboardPage() {
     setBuyError(null);
     setBuyEtfInfo(null);
     setPorcentajeObjetivoInstrumento("");
+    setComisionAnualBuy("");
     setPropietarioBuy("Pash");
   };
 
@@ -573,6 +575,7 @@ export default function DashboardPage() {
       const customPrice = parseFloat(precioUnitario) || undefined;
       
       const objVal = porcentajeObjetivoInstrumento ? parseFloat(porcentajeObjetivoInstrumento) : undefined;
+      const comisionVal = comisionAnualBuy ? comisionAnualBuy : undefined;
       const result = await backendApi.simulateBuy(
         selectedPortfolioId,
         userId,
@@ -581,7 +584,8 @@ export default function DashboardPage() {
         seccion,
         customPrice,
         objVal,
-        propietarioBuy
+        propietarioBuy,
+        comisionVal
       );
 
       if (result.success) {
@@ -2495,6 +2499,17 @@ export default function DashboardPage() {
                         placeholder="e.g. 45.0"
                         className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
                         min="0" max="100" step="0.1"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-bold text-amber-500 uppercase tracking-wide">Comisión Anual (%)</label>
+                      <input
+                        type="number"
+                        value={comisionAnualBuy}
+                        onChange={(e) => setComisionAnualBuy(e.target.value)}
+                        placeholder="e.g. 0.03"
+                        className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-xs font-mono text-white focus:outline-none focus:border-amber-500 transition"
+                        min="0" step="0.001"
                       />
                     </div>
                     <div className="space-y-1 col-span-2 sm:col-span-1">

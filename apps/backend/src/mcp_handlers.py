@@ -232,7 +232,7 @@ class MCPRequestHandler:
             return {"success": False, "error": str(e)}
 
 
-    def execute_simulate_buy(self, portfolio_id: str, user_id: str, ticker: str, cantidad: float, seccion: str, valor_actual_manual: Optional[float] = None, porcentaje_objetivo_instrumento: Optional[float] = None, propietario: Optional[str] = 'Pash') -> Dict[str, Any]:
+    def execute_simulate_buy(self, portfolio_id: str, user_id: str, ticker: str, cantidad: float, seccion: str, valor_actual_manual: Optional[float] = None, porcentaje_objetivo_instrumento: Optional[float] = None, propietario: Optional[str] = 'Pash', comision_anual: Optional[str] = None) -> Dict[str, Any]:
         """
         Ejecuta la compra simulada de un activo validando fondos disponibles del portafolio.
         """
@@ -335,6 +335,15 @@ class MCPRequestHandler:
                     )
                 except Exception as ex:
                     print(f"⚠️ Warning: No se pudo guardar el objetivo del instrumento al comprar: {str(ex)}")
+            
+            # Actualizar la comisión anual del instrumento si se proporcionó
+            if comision_anual is not None and str(comision_anual).strip() != "":
+                try:
+                    # Formateamos asegurando que tenga % al final si es necesario
+                    comision_formatted = f"{comision_anual}%" if not str(comision_anual).endswith('%') else str(comision_anual)
+                    self.supabase.table('instrumentos_metadata').update({"comision": comision_formatted}).eq('ticker', ticker.upper()).execute()
+                except Exception as ex:
+                    print(f"⚠️ Warning: No se pudo actualizar la comisión del instrumento: {str(ex)}")
             
             return {
                 "success": True,

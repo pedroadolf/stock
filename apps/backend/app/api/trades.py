@@ -18,6 +18,7 @@ class SimulateBuyRequest(BaseModel):
     valor_actual_manual: Optional[float] = None
     porcentaje_objetivo_instrumento: Optional[float] = None
     propietario: Optional[str] = "Pash"
+    comision_anual: Optional[str] = None
 
 class InstrumentTargetRequest(BaseModel):
     portfolio_id: str
@@ -155,7 +156,8 @@ def simulate_buy_endpoint(
         seccion=payload.seccion,
         valor_actual_manual=payload.valor_actual_manual,
         porcentaje_objetivo_instrumento=payload.porcentaje_objetivo_instrumento,
-        propietario=payload.propietario
+        propietario=payload.propietario,
+        comision_anual=payload.comision_anual
     )
     
     if not result.get("success"):
