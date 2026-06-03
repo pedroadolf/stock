@@ -1478,8 +1478,8 @@ export default function DashboardPage() {
                                     <tr className="bg-blue-950/10 border-t border-blue-900/20">
                                       <td className="py-1.5 pl-14 text-[10px] font-extrabold uppercase text-blue-300">Subtotal {prop}</td>
                                       <td className="py-1.5 text-center font-mono text-[10px] font-bold text-blue-300">{propSubtotalPctClass.toFixed(1)}%</td>
-                                      <td className="py-1.5 text-center font-mono text-[10px] text-blue-200">{propRatioPond > 0 ? `${propRatioPond.toFixed(3)}%` : '—'}</td>
                                       <td className="py-1.5 text-center font-mono text-[10px] text-blue-200">—</td>
+                                      <td className="py-1.5 text-center font-mono text-[10px] text-blue-200">{propRatioPond > 0 ? `${propRatioPond.toFixed(3)}%` : '—'}</td>
                                       <td className="py-1.5 text-right font-mono text-[10px] text-blue-200">{propCostoComision > 0 ? `$${propCostoComision.toFixed(2)}` : '—'}</td>
                                       <td className="py-1.5 text-right font-mono text-[10px] font-bold text-blue-300">${propSubtotalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
                                     </tr>
