@@ -1101,7 +1101,6 @@ export default function DashboardPage() {
         {activeTab === 'summary' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
               {/* Columna Izquierda: Tabla de Asignación por Clase de Activo */}
               <div className="lg:col-span-2 gostock-box p-6 space-y-6">
                 <div>
@@ -1114,15 +1113,12 @@ export default function DashboardPage() {
                     <thead>
                       <tr className="border-b border-gray-800 text-[10px] text-gray-500 font-bold uppercase tracking-wider">
                         <th className="pb-3 pl-8 text-white [data-theme='light']:text-gray-900">Clase de Activo</th>
-                        <th className="pb-3 text-center text-white [data-theme='light']:text-gray-900">Objetivo (%)</th>
                         <th className="pb-3 text-center text-white [data-theme='light']:text-gray-900">Actual (%)</th>
                         <th className="pb-3 text-right text-white [data-theme='light']:text-gray-900">Inversión Actual</th>
-                        <th className="pb-3 text-right text-white [data-theme='light']:text-gray-900">Diferencia</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-800/40 text-xs">
                       {displaySecciones?.map((sec: any, idx: number) => {
-                        const diff = sec.valor_actual - (sec.porcentaje_objetivo / 100 * displayTotalValue);
                         const isExpanded = expandedSections[sec.nombre_seccion];
                         
                         // Encontrar holdings de esta seccion y ordenarlos de mayor a menor por valor_actual
@@ -1145,12 +1141,8 @@ export default function DashboardPage() {
                                 <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
                                 {sec.nombre_seccion}
                               </td>
-                              <td className="py-4 text-center font-mono font-bold text-gray-300">{sec.porcentaje_objetivo.toFixed(1)}%</td>
                               <td className="py-4 text-center font-mono font-bold text-gray-400">{sec.porcentaje_real.toFixed(1)}%</td>
-                              <td className="py-4 text-right font-mono text-white [data-theme='light']:text-gray-900">${sec.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
-                              <td className={`py-4 text-right font-mono font-bold ${diff >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                                {diff >= 0 ? "+" : ""}${diff.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}
-                              </td>
+                              <td className="py-4 text-right font-mono text-white [data-theme='light']:text-gray-900">${sec.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
                             </tr>
                             
                             {isExpanded && seccionHoldings.length > 0 && seccionHoldings.map((h: any) => {
@@ -1198,17 +1190,16 @@ export default function DashboardPage() {
                                               e.stopPropagation();
                                               startConfigureSubPortfolio(h.ticker, h.seccion, h.propietario);
                                             }}
-                                            className="text-[9px] opacity-0 group-hover:opacity-100 hover:opacity-100 bg-gray-800/80 text-gray-400 border border-gray-700/60 rounded px-1.5 py-0.5 hover:text-white transition flex items-center gap-1 cursor-pointer"
+                                            className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded px-1.5 py-0.5 hover:bg-indigo-500/30 transition flex items-center gap-1 cursor-pointer"
+                                            title="Configurar sub-portafolio"
                                           >
-                                            <Plus className="w-2.5 h-2.5" />
-                                            Incluir Portafolio
+                                            <Briefcase className="w-2.5 h-2.5" />
+                                            Añadir
                                           </button>
                                         )}
                                       </div>
                                     </td>
                                     
-                                    {/* Col 2: Target % (Editable) */}
-                                    <td className="py-2.5 text-center font-mono select-none">
                                       {editingTicker === editKey ? (
                                         <input
                                           type="number"
