@@ -1129,8 +1129,11 @@ export default function DashboardPage() {
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="border-b border-gray-800 text-[10px] text-gray-500 font-bold uppercase tracking-wider">
-                        <th className="pb-3 pl-8 text-white [data-theme='light']:text-gray-900">Clase de Activo</th>
+                        <th className="pb-3 pl-8 text-white [data-theme='light']:text-gray-900">Clase / Instrumento</th>
                         <th className="pb-3 text-center text-white [data-theme='light']:text-gray-900">Actual (%)</th>
+                        <th className="pb-3 text-center text-white [data-theme='light']:text-gray-900">Comisión %</th>
+                        <th className="pb-3 text-center text-white [data-theme='light']:text-gray-900">Ratio Pond.</th>
+                        <th className="pb-3 text-right text-white [data-theme='light']:text-gray-900">Costo Comisión</th>
                         <th className="pb-3 text-right text-white [data-theme='light']:text-gray-900">Inversión Actual</th>
                       </tr>
                     </thead>
@@ -1159,75 +1162,78 @@ export default function DashboardPage() {
                                 {sec.nombre_seccion}
                               </td>
                               <td className="py-4 text-center font-mono font-bold text-gray-400">{sec.porcentaje_real.toFixed(1)}%</td>
+                              <td className="py-4 text-center font-mono text-gray-500">—</td>
+                              <td className="py-4 text-center font-mono text-gray-500">—</td>
+                              <td className="py-4 text-right font-mono text-gray-500">—</td>
                               <td className="py-4 text-right font-mono text-white [data-theme='light']:text-gray-900">${sec.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
                             </tr>
-                            
-                            {isExpanded && seccionHoldings.length > 0 && (() => {
+                                {isExpanded && seccionHoldings.length > 0 && (() => {
+                              // Total de la clase para calcular % dentro de clase
+                              const totalClassVal = seccionHoldings.reduce((s: number, h: any) => s + (h.valor_actual || 0), 0);
                               // Agrupar holdings por propietario
                               const propietariosEnClase: string[] = Array.from(new Set(seccionHoldings.map((h: any) => h.propietario as string)));
                               return propietariosEnClase.map((prop: string) => {
                                 const propHoldings = seccionHoldings.filter((h: any) => h.propietario === prop);
                                 const propSubtotalVal = propHoldings.reduce((s: number, h: any) => s + (h.valor_actual || 0), 0);
-                                const propSubtotalPct = displayTotalValue > 0 ? (propSubtotalVal / displayTotalValue) * 100 : 0;
+                                // % respecto a la clase (no al total del portafolio)
+                                const propSubtotalPctClass = totalClassVal > 0 ? (propSubtotalVal / totalClassVal) * 100 : 0;
+                                // Ratio ponderado de comisión del propietario en esta clase
+                                const propRatioPond = propHoldings.reduce((s: number, h: any) => {
+                                  const com = parseFloat(h.comision_anual) || 0;
+                                  const peso = totalClassVal > 0 ? (h.valor_actual / totalClassVal) : 0;
+                                  return s + com * peso;
+                                }, 0);
+                                const propCostoComision = propHoldings.reduce((s: number, h: any) => {
+                                  const com = parseFloat(h.comision_anual) || 0;
+                                  return s + (h.valor_actual * com / 100);
+                                }, 0);
                                 return (
                                   <React.Fragment key={`prop_group_${sec.nombre_seccion}_${prop}`}>
-                                    {/* Fila cabecera del propietario dentro de la clase */}
-                                    <tr className="bg-blue-950/20 border-t border-blue-900/30">
-                                      <td className="py-1.5 pl-10 flex items-center gap-2">
-                                        <span className="h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0"></span>
-                                        <span className="text-[10px] font-black uppercase tracking-wider text-blue-400">{prop}</span>
-                                      </td>
-                                      <td className="py-1.5 text-center font-mono text-[10px] text-blue-300">{propSubtotalPct.toFixed(1)}%</td>
-                                      <td className="py-1.5 text-right font-mono text-[10px] text-blue-300">${propSubtotalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
-                                    </tr>
-                                    {/* Holdings de este propietario */}
+                                    {/* Holdings de este propietario — sin fila cabecera */}
                                     {propHoldings.map((h: any) => {
-                                      const hasSubPortfolio = h.sub_portafolio !== null && h.sub_portafolio !== undefined;
                                       const isSubPortfolioExpanded = expandedSubPortfolios[`${h.ticker}_${h.propietario}`];
                                       const isConfiguringThis = configuringSubPortfolio?.ticker === h.ticker && configuringSubPortfolio?.propietario === h.propietario;
                                       const editKey = `${h.ticker}_${h.propietario}`;
+                                      const comision = parseFloat(h.comision_anual) || 0;
+                                      // Ratio ponderado: (valor del instrumento / total clase) * comisión
+                                      const ratioPond = totalClassVal > 0 ? (h.valor_actual / totalClassVal) * comision : 0;
+                                      const costoComision = h.valor_actual * comision / 100;
+                                      // % dentro de la clase para este instrumento
+                                      const pctEnClase = totalClassVal > 0 ? (h.valor_actual / totalClassVal) * 100 : 0;
                                       return (
                                         <React.Fragment key={editKey}>
                                           <tr className="group bg-gray-900/25 hover:bg-gray-800/10 transition-colors border-t border-gray-800/20">
+                                            {/* Col 1: Ticker + Nombre + Tit. debajo */}
                                             <td className="py-2.5 pl-14">
-                                              <div className="flex items-center gap-2">
-                                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                                                <span className="font-bold text-amber-500 font-mono shrink-0">{h.ticker}</span>
-                                                <span className="text-gray-400 truncate max-w-[120px] [data-theme='light']:text-gray-600 font-medium" title={h.nombre}>
-                                                  {h.nombre}
-                                                </span>
-                                                <span className="text-[10px] text-gray-500 font-mono ml-auto">
-                                                  ({h.cantidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} tit.)
-                                                </span>
-                                        
-                                                {/* Acciones de Sub-portafolio */}
-                                                {hasSubPortfolio ? (
-                                                  <button
-                                                    onClick={(e) => { e.stopPropagation(); toggleSubPortfolioExpand(h.ticker, h.propietario); }}
-                                                    className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded px-1.5 py-0.5 hover:bg-indigo-500/30 transition flex items-center gap-1 cursor-pointer"
-                                                    title="Ver portafolio"
-                                                  >
-                                                    <Briefcase className="w-2.5 h-2.5" />
-                                                    {isSubPortfolioExpanded ? 'Ocultar' : 'Portafolio'}
-                                                  </button>
-                                                ) : (
-                                                  <button
-                                                    onClick={(e) => { e.stopPropagation(); startConfigureSubPortfolio(h.ticker, h.seccion, h.propietario); }}
-                                                    className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded px-1.5 py-0.5 hover:bg-indigo-500/30 transition flex items-center gap-1 cursor-pointer"
-                                                    title="Añadir portafolio"
-                                                  >
-                                                    <Briefcase className="w-2.5 h-2.5" />
-                                                    Añadir
-                                                  </button>
-                                                )}
+                                              <div className="flex flex-col gap-0.5">
+                                                <div className="flex items-center gap-2">
+                                                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                                                  <span className="font-bold text-amber-500 font-mono shrink-0">{h.ticker}</span>
+                                                  <span className="text-gray-400 truncate max-w-[140px] font-medium" title={h.nombre}>{h.nombre}</span>
+                                                </div>
+                                                <div className="pl-4 flex items-center gap-3 text-[9px] text-gray-500 font-mono">
+                                                  <span>{h.cantidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} tít.</span>
+                                                </div>
                                               </div>
                                             </td>
-                                            {/* Actual % */}
+                                            {/* Col 2: % Actual en clase */}
                                             <td className="py-2.5 text-center font-mono">
-                                              <div className="text-gray-300">{(h.porcentaje_real_clase || 0).toFixed(1)}%</div>
+                                              <div className="text-gray-300">{pctEnClase.toFixed(1)}%</div>
                                               <div className="text-[9px] text-gray-500 mt-0.5">({(h.porcentaje_real_total || 0).toFixed(1)}% total)</div>
                                             </td>
-                                            {/* Inversión Actual */}
+                                            {/* Col 3: % Comisión */}
+                                            <td className="py-2.5 text-center font-mono">
+                                              <span className="text-gray-400">{comision > 0 ? `${comision.toFixed(2)}%` : '—'}</span>
+                                            </td>
+                                            {/* Col 4: Ratio Ponderado */}
+                                            <td className="py-2.5 text-center font-mono">
+                                              <span className="text-gray-400">{ratioPond > 0 ? `${ratioPond.toFixed(3)}%` : '—'}</span>
+                                            </td>
+                                            {/* Col 5: Costo Comisión */}
+                                            <td className="py-2.5 text-right font-mono">
+                                              <span className="text-gray-400">{costoComision > 0 ? `$${costoComision.toFixed(2)}` : '—'}</span>
+                                            </td>
+                                            {/* Col 6: Inversión Actual */}
                                             <td className="py-2.5 text-right font-mono text-white [data-theme='light']:text-gray-900">
                                               ${h.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}
                                             </td>
@@ -1236,7 +1242,7 @@ export default function DashboardPage() {
                                           {/* Edición del Sub-portafolio */}
                                           {isConfiguringThis && (
                                             <tr className="bg-slate-900/40 border-t border-b border-gray-800">
-                                              <td colSpan={3} className="py-4 pl-16 pr-6">
+                                              <td colSpan={6} className="py-4 pl-16 pr-6">
                                         <div className="bg-[#111827] border border-gray-800 rounded-2xl p-5 space-y-4">
                                           <div className="flex justify-between items-center pb-2 border-b border-gray-800">
                                             <h4 className="text-xs font-black uppercase text-amber-500 tracking-wider">
@@ -1375,9 +1381,9 @@ export default function DashboardPage() {
                                             </tr>
                                           )}
                                           {/* Detalles del Sub-portafolio */}
-                                          {isSubPortfolioExpanded && hasSubPortfolio && (
+                                          {isSubPortfolioExpanded && h.sub_portafolio && (
                                             <tr className="bg-slate-950/20 border-t border-gray-800/10">
-                                              <td colSpan={3} className="py-3 pl-16 pr-6">
+                                              <td colSpan={6} className="py-3 pl-16 pr-6">
                                         <div className="bg-slate-900/30 border border-gray-800/60 rounded-xl p-4 space-y-3">
                                           <div className="flex justify-between items-center">
                                             <span className="text-[10px] text-gray-500 font-black uppercase tracking-wider">
@@ -1468,10 +1474,13 @@ export default function DashboardPage() {
                                       );
                                     })}
 
-                                    {/* Subtotal propietario en esta clase */}
+                                    {/* Subtotal propietario en esta clase (% dentro de clase) */}
                                     <tr className="bg-blue-950/10 border-t border-blue-900/20">
                                       <td className="py-1.5 pl-14 text-[10px] font-extrabold uppercase text-blue-300">Subtotal {prop}</td>
-                                      <td className="py-1.5 text-center font-mono text-[10px] font-bold text-blue-300">{propSubtotalPct.toFixed(1)}%</td>
+                                      <td className="py-1.5 text-center font-mono text-[10px] font-bold text-blue-300">{propSubtotalPctClass.toFixed(1)}%</td>
+                                      <td className="py-1.5 text-center font-mono text-[10px] text-blue-200">{propRatioPond > 0 ? `${propRatioPond.toFixed(3)}%` : '—'}</td>
+                                      <td className="py-1.5 text-center font-mono text-[10px] text-blue-200">—</td>
+                                      <td className="py-1.5 text-right font-mono text-[10px] text-blue-200">{propCostoComision > 0 ? `$${propCostoComision.toFixed(2)}` : '—'}</td>
                                       <td className="py-1.5 text-right font-mono text-[10px] font-bold text-blue-300">${propSubtotalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
                                     </tr>
                                   </React.Fragment>
@@ -1483,10 +1492,23 @@ export default function DashboardPage() {
                             {isExpanded && seccionHoldings.length > 0 && (() => {
                               const totalClassVal = seccionHoldings.reduce((sum: number, sh: any) => sum + (sh.valor_actual || 0), 0);
                               const totalClassPct = displayTotalValue > 0 ? (totalClassVal / displayTotalValue) * 100 : 0;
+                              // Ratio ponderado global de la clase
+                              const classRatioPond = seccionHoldings.reduce((s: number, h: any) => {
+                                const com = parseFloat(h.comision_anual) || 0;
+                                const peso = totalClassVal > 0 ? (h.valor_actual / totalClassVal) : 0;
+                                return s + com * peso;
+                              }, 0);
+                              const classCosto = seccionHoldings.reduce((s: number, h: any) => {
+                                const com = parseFloat(h.comision_anual) || 0;
+                                return s + (h.valor_actual * com / 100);
+                              }, 0);
                               return (
                                 <tr className="bg-gray-800/20 border-t-2 border-gray-700/80 font-bold">
                                   <td className="py-2 pl-10 text-white [data-theme='light']:text-gray-900 font-extrabold uppercase text-xs">Total {sec.nombre_seccion}</td>
                                   <td className="py-2 text-center font-mono text-gray-200 text-xs">{totalClassPct.toFixed(1)}%</td>
+                                  <td className="py-2 text-center font-mono text-gray-200 text-xs">—</td>
+                                  <td className="py-2 text-center font-mono text-amber-400 text-xs">{classRatioPond > 0 ? `${classRatioPond.toFixed(3)}%` : '—'}</td>
+                                  <td className="py-2 text-right font-mono text-amber-400 text-xs">{classCosto > 0 ? `$${classCosto.toFixed(2)}` : '—'}</td>
                                   <td className="py-2 text-right font-mono text-white [data-theme='light']:text-gray-900 text-xs">${totalClassVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
                                 </tr>
                               );
@@ -1494,7 +1516,7 @@ export default function DashboardPage() {
 
                             {isExpanded && seccionHoldings.length === 0 && (
                               <tr className="bg-gray-900/30">
-                                <td colSpan={3} className="py-3 px-12 text-xs text-gray-500 italic">
+                                <td colSpan={6} className="py-3 px-12 text-xs text-gray-500 italic">
                                   Sin instrumentos en esta clase
                                 </td>
                               </tr>
@@ -1506,10 +1528,23 @@ export default function DashboardPage() {
                       {displaySecciones.length > 0 && (() => {
                         const totalReal = displaySecciones.reduce((sum: number, s: any) => sum + (s.porcentaje_real || 0), 0);
                         const totalActual = displaySecciones.reduce((sum: number, s: any) => sum + (s.valor_actual || 0), 0);
+                        const allHoldings = filteredHoldings || [];
+                        const globalRatioPond = allHoldings.reduce((s: number, h: any) => {
+                          const com = parseFloat(h.comision_anual) || 0;
+                          const peso = totalActual > 0 ? (h.valor_actual / totalActual) : 0;
+                          return s + com * peso;
+                        }, 0);
+                        const globalCosto = allHoldings.reduce((s: number, h: any) => {
+                          const com = parseFloat(h.comision_anual) || 0;
+                          return s + (h.valor_actual * com / 100);
+                        }, 0);
                         return (
                           <tr className="border-t-2 border-gray-700 bg-gray-900/50 font-bold">
-                            <td className="py-4 pl-8 text-white [data-theme='light']:text-gray-900 font-extrabold uppercase">Total</td>
+                            <td className="py-4 pl-8 text-white [data-theme='light']:text-gray-900 font-extrabold uppercase">Total Portafolio</td>
                             <td className="py-4 text-center font-mono text-gray-300">{totalReal.toFixed(1)}%</td>
+                            <td className="py-4 text-center font-mono text-gray-500">—</td>
+                            <td className="py-4 text-center font-mono text-amber-400">{globalRatioPond > 0 ? `${globalRatioPond.toFixed(3)}%` : '—'}</td>
+                            <td className="py-4 text-right font-mono text-amber-400">{globalCosto > 0 ? `$${globalCosto.toFixed(2)}` : '—'}</td>
                             <td className="py-4 text-right font-mono text-white [data-theme='light']:text-gray-900">${totalActual.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
                           </tr>
                         );
