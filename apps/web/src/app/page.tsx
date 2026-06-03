@@ -165,6 +165,9 @@ export default function DashboardPage() {
   const [propietarioFilter, setPropietarioFilter] = useState<string>("Todos");
   const [propietarioBuy, setPropietarioBuy] = useState<string>("Pash");
 
+  // Pestaña activa del panel de gráficos
+  const [activeChartTab, setActiveChartTab] = useState<'clases' | 'propietarios' | 'total_clases' | 'total_prop'>('clases');
+
   // Carga inicial y listeners
   useEffect(() => {
     const storedTheme = (localStorage.getItem('theme') as 'dark' | 'light') || 'dark';
@@ -864,7 +867,7 @@ export default function DashboardPage() {
     return 0;
   });
 
-  // Preparar datos para el gráfico de torta de Recharts
+  // Preparar datos para el gráfico de torta de Recharts (por Clase)
   const pieData = displaySecciones
     .filter((sec: any) => sec.valor_actual > 0)
     .map((sec: any, idx: number) => ({
@@ -873,6 +876,20 @@ export default function DashboardPage() {
       percentage: sec.porcentaje_real,
       color: COLORS[idx % COLORS.length]
     }));
+
+  // Preparar datos para gráfico por Propietario
+  const propietariosUnicos: string[] = Array.from(new Set((status?.holdings || []).map((h: any) => h.propietario as string)));
+  const propietarioData = propietariosUnicos.map((prop: string, idx: number) => {
+    const propHoldings = (status?.holdings || []).filter((h: any) => h.propietario === prop);
+    const valor = propHoldings.reduce((sum: number, h: any) => sum + (h.valor_actual || 0), 0);
+    const totalVal = status?.total_value || 1;
+    return {
+      name: prop,
+      value: valor,
+      percentage: (valor / totalVal) * 100,
+      color: COLORS[idx % COLORS.length]
+    };
+  }).filter((p: any) => p.value > 0);
 
   return (
     <div className="min-h-screen bg-[#0B0F19] [data-theme='light']:bg-[#F3F4F6] text-gray-100 [data-theme='light']:text-gray-900 flex transition-colors duration-300 font-inter">
@@ -1145,77 +1162,81 @@ export default function DashboardPage() {
                               <td className="py-4 text-right font-mono text-white [data-theme='light']:text-gray-900">${sec.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
                             </tr>
                             
-                            {isExpanded && seccionHoldings.length > 0 && seccionHoldings.map((h: any) => {
-                              const hasSubPortfolio = h.sub_portafolio !== null && h.sub_portafolio !== undefined;
-                              const isSubPortfolioExpanded = expandedSubPortfolios[`${h.ticker}_${h.propietario}`];
-                              const isConfiguringThis = configuringSubPortfolio?.ticker === h.ticker && configuringSubPortfolio?.propietario === h.propietario;
-                              const editKey = `${h.ticker}_${h.propietario}`;
-                              
-                              return (
-                                <React.Fragment key={editKey}>
-                                  <tr className="group bg-gray-900/25 hover:bg-gray-800/10 transition-colors border-t border-gray-800/20">
-                                    {/* Col 1: Instrument Details */}
-                                    <td className="py-2.5 pl-12">
-                                      <div className="flex items-center gap-2">
-                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0"></span>
-                                        <span className="font-bold text-amber-500 font-mono shrink-0">{h.ticker}</span>
-                                        {propietarioFilter === "Todos" && (
-                                          <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-[#111827] border border-gray-800 text-blue-400 font-mono uppercase">
-                                            {h.propietario}
-                                          </span>
-                                        )}
-                                        <span className="text-gray-400 truncate max-w-[120px] [data-theme='light']:text-gray-600 font-medium" title={h.nombre}>
-                                          {h.nombre}
-                                        </span>
-                                        <span className="text-[10px] text-gray-500 font-mono ml-auto">
-                                          ({h.cantidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })} tit.)
-                                        </span>
+                            {isExpanded && seccionHoldings.length > 0 && (() => {
+                              // Agrupar holdings por propietario
+                              const propietariosEnClase: string[] = Array.from(new Set(seccionHoldings.map((h: any) => h.propietario as string)));
+                              return propietariosEnClase.map((prop: string) => {
+                                const propHoldings = seccionHoldings.filter((h: any) => h.propietario === prop);
+                                const propSubtotalVal = propHoldings.reduce((s: number, h: any) => s + (h.valor_actual || 0), 0);
+                                const propSubtotalPct = displayTotalValue > 0 ? (propSubtotalVal / displayTotalValue) * 100 : 0;
+                                return (
+                                  <React.Fragment key={`prop_group_${sec.nombre_seccion}_${prop}`}>
+                                    {/* Fila cabecera del propietario dentro de la clase */}
+                                    <tr className="bg-blue-950/20 border-t border-blue-900/30">
+                                      <td className="py-1.5 pl-10 flex items-center gap-2">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0"></span>
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-blue-400">{prop}</span>
+                                      </td>
+                                      <td className="py-1.5 text-center font-mono text-[10px] text-blue-300">{propSubtotalPct.toFixed(1)}%</td>
+                                      <td className="py-1.5 text-right font-mono text-[10px] text-blue-300">${propSubtotalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
+                                    </tr>
+                                    {/* Holdings de este propietario */}
+                                    {propHoldings.map((h: any) => {
+                                      const hasSubPortfolio = h.sub_portafolio !== null && h.sub_portafolio !== undefined;
+                                      const isSubPortfolioExpanded = expandedSubPortfolios[`${h.ticker}_${h.propietario}`];
+                                      const isConfiguringThis = configuringSubPortfolio?.ticker === h.ticker && configuringSubPortfolio?.propietario === h.propietario;
+                                      const editKey = `${h.ticker}_${h.propietario}`;
+                                      return (
+                                        <React.Fragment key={editKey}>
+                                          <tr className="group bg-gray-900/25 hover:bg-gray-800/10 transition-colors border-t border-gray-800/20">
+                                            <td className="py-2.5 pl-14">
+                                              <div className="flex items-center gap-2">
+                                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                                                <span className="font-bold text-amber-500 font-mono shrink-0">{h.ticker}</span>
+                                                <span className="text-gray-400 truncate max-w-[120px] [data-theme='light']:text-gray-600 font-medium" title={h.nombre}>
+                                                  {h.nombre}
+                                                </span>
+                                                <span className="text-[10px] text-gray-500 font-mono ml-auto">
+                                                  ({h.cantidad.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} tit.)
+                                                </span>
                                         
-                                        {/* Acciones de Sub-portafolio */}
-                                        {hasSubPortfolio ? (
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              toggleSubPortfolioExpand(h.ticker, h.propietario);
-                                            }}
-                                            className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded px-1.5 py-0.5 hover:bg-indigo-500/30 transition flex items-center gap-1 cursor-pointer"
-                                            title="Ver portafolio de este instrumento"
-                                          >
-                                            <Briefcase className="w-2.5 h-2.5" />
-                                            {isSubPortfolioExpanded ? 'Ocultar' : 'Portafolio'}
-                                          </button>
-                                        ) : (
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              startConfigureSubPortfolio(h.ticker, h.seccion, h.propietario);
-                                            }}
-                                            className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded px-1.5 py-0.5 hover:bg-indigo-500/30 transition flex items-center gap-1 cursor-pointer"
-                                            title="Configurar sub-portafolio"
-                                          >
-                                            <Briefcase className="w-2.5 h-2.5" />
-                                            Añadir
-                                          </button>
-                                        )}
-                                      </div>
-                                    </td>
-                                    
-                                    {/* Col 2: Actual % */}
-                                    <td className="py-2.5 text-center font-mono">
-                                      <div className="text-gray-300">{(h.porcentaje_real_clase || 0).toFixed(1)}%</div>
-                                      <div className="text-[9px] text-gray-500 mt-0.5">({(h.porcentaje_real_total || 0).toFixed(2)}% total)</div>
-                                    </td>
+                                                {/* Acciones de Sub-portafolio */}
+                                                {hasSubPortfolio ? (
+                                                  <button
+                                                    onClick={(e) => { e.stopPropagation(); toggleSubPortfolioExpand(h.ticker, h.propietario); }}
+                                                    className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded px-1.5 py-0.5 hover:bg-indigo-500/30 transition flex items-center gap-1 cursor-pointer"
+                                                    title="Ver portafolio"
+                                                  >
+                                                    <Briefcase className="w-2.5 h-2.5" />
+                                                    {isSubPortfolioExpanded ? 'Ocultar' : 'Portafolio'}
+                                                  </button>
+                                                ) : (
+                                                  <button
+                                                    onClick={(e) => { e.stopPropagation(); startConfigureSubPortfolio(h.ticker, h.seccion, h.propietario); }}
+                                                    className="text-[9px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded px-1.5 py-0.5 hover:bg-indigo-500/30 transition flex items-center gap-1 cursor-pointer"
+                                                    title="Añadir portafolio"
+                                                  >
+                                                    <Briefcase className="w-2.5 h-2.5" />
+                                                    Añadir
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </td>
+                                            {/* Actual % */}
+                                            <td className="py-2.5 text-center font-mono">
+                                              <div className="text-gray-300">{(h.porcentaje_real_clase || 0).toFixed(1)}%</div>
+                                              <div className="text-[9px] text-gray-500 mt-0.5">({(h.porcentaje_real_total || 0).toFixed(1)}% total)</div>
+                                            </td>
+                                            {/* Inversión Actual */}
+                                            <td className="py-2.5 text-right font-mono text-white [data-theme='light']:text-gray-900">
+                                              ${h.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}
+                                            </td>
+                                          </tr>
 
-                                    {/* Col 3: Inversión Actual */}
-                                    <td className="py-2.5 text-right font-mono text-white [data-theme='light']:text-gray-900">
-                                      ${h.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}
-                                    </td>
-                                  </tr>
-
-                                  {/* RENDERIZAR EDICIÓN DEL SUBPORTAFOLIO */}
-                                  {isConfiguringThis && (
-                                    <tr className="bg-slate-900/40 border-t border-b border-gray-800">
-                                      <td colSpan={3} className="py-4 pl-16 pr-6">
+                                          {/* Edición del Sub-portafolio */}
+                                          {isConfiguringThis && (
+                                            <tr className="bg-slate-900/40 border-t border-b border-gray-800">
+                                              <td colSpan={3} className="py-4 pl-16 pr-6">
                                         <div className="bg-[#111827] border border-gray-800 rounded-2xl p-5 space-y-4">
                                           <div className="flex justify-between items-center pb-2 border-b border-gray-800">
                                             <h4 className="text-xs font-black uppercase text-amber-500 tracking-wider">
@@ -1350,14 +1371,13 @@ export default function DashboardPage() {
                                             </button>
                                           </div>
                                         </div>
-                                      </td>
-                                    </tr>
-                                  )}
-
-                                  {/* RENDERIZAR DETALLES DEL SUBPORTAFOLIO */}
-                                  {isSubPortfolioExpanded && hasSubPortfolio && (
-                                    <tr className="bg-slate-950/20 border-t border-gray-800/10">
-                                      <td colSpan={3} className="py-3 pl-16 pr-6">
+                                              </td>
+                                            </tr>
+                                          )}
+                                          {/* Detalles del Sub-portafolio */}
+                                          {isSubPortfolioExpanded && hasSubPortfolio && (
+                                            <tr className="bg-slate-950/20 border-t border-gray-800/10">
+                                              <td colSpan={3} className="py-3 pl-16 pr-6">
                                         <div className="bg-slate-900/30 border border-gray-800/60 rounded-xl p-4 space-y-3">
                                           <div className="flex justify-between items-center">
                                             <span className="text-[10px] text-gray-500 font-black uppercase tracking-wider">
@@ -1444,47 +1464,34 @@ export default function DashboardPage() {
                                       </td>
                                     </tr>
                                   )}
-                                </React.Fragment>
-                              );
-                            })}
-                            
-                            {/* Fila de Totales de la Clase */}
+                                        </React.Fragment>
+                                      );
+                                    })}
+
+                                    {/* Subtotal propietario en esta clase */}
+                                    <tr className="bg-blue-950/10 border-t border-blue-900/20">
+                                      <td className="py-1.5 pl-14 text-[10px] font-extrabold uppercase text-blue-300">Subtotal {prop}</td>
+                                      <td className="py-1.5 text-center font-mono text-[10px] font-bold text-blue-300">{propSubtotalPct.toFixed(1)}%</td>
+                                      <td className="py-1.5 text-right font-mono text-[10px] font-bold text-blue-300">${propSubtotalVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
+                                    </tr>
+                                  </React.Fragment>
+                                );
+                              });
+                            })()}
+
+                            {/* Fila de Total de la Clase */}
                             {isExpanded && seccionHoldings.length > 0 && (() => {
-                              const totalClassTargetObj = seccionHoldings.reduce((sum: number, sh: any) => sum + (sh.porcentaje_objetivo_clase || 0), 0);
-                              const totalClassRealObj = seccionHoldings.reduce((sum: number, sh: any) => sum + (sh.porcentaje_real_clase || 0), 0);
-                              const totalClassValActual = seccionHoldings.reduce((sum: number, sh: any) => sum + (sh.valor_actual || 0), 0);
-                              const totalClassDesviacion = seccionHoldings.reduce((sum: number, sh: any) => sum + (sh.desviacion_valor || 0), 0);
+                              const totalClassVal = seccionHoldings.reduce((sum: number, sh: any) => sum + (sh.valor_actual || 0), 0);
+                              const totalClassPct = displayTotalValue > 0 ? (totalClassVal / displayTotalValue) * 100 : 0;
                               return (
-                                <tr className="bg-gray-800/10 border-t border-b-2 border-gray-700/80 font-bold">
-                                  <td className="py-2.5 pl-12 text-white [data-theme='light']:text-gray-900 font-extrabold uppercase">Total Clase</td>
-                                  <td className="py-2.5 text-center font-mono text-gray-300">{totalClassTargetObj.toFixed(1)}%</td>
-                                  <td className="py-2.5 text-center font-mono text-gray-300">{totalClassRealObj.toFixed(1)}%</td>
-                                  <td className="py-2.5 text-right font-mono text-white [data-theme='light']:text-gray-900">${totalClassValActual.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
-                                  <td className={`py-2.5 text-right font-mono ${totalClassDesviacion >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                                    {totalClassDesviacion >= 0 ? "+" : ""}${totalClassDesviacion.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}
-                                  </td>
+                                <tr className="bg-gray-800/20 border-t-2 border-gray-700/80 font-bold">
+                                  <td className="py-2 pl-10 text-white [data-theme='light']:text-gray-900 font-extrabold uppercase text-xs">Total {sec.nombre_seccion}</td>
+                                  <td className="py-2 text-center font-mono text-gray-200 text-xs">{totalClassPct.toFixed(1)}%</td>
+                                  <td className="py-2 text-right font-mono text-white [data-theme='light']:text-gray-900 text-xs">${totalClassVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
                                 </tr>
                               );
                             })()}
 
-                            {/* Alerta si la suma de los objetivos de la clase no es 100% */}
-                            {isExpanded && seccionHoldings.length > 0 && (() => {
-                              const sumTargets = seccionHoldings.reduce((sum: number, sh: any) => sum + (sh.porcentaje_objetivo_clase || 0), 0);
-                              if (Math.abs(sumTargets - 100.0) > 0.05) {
-                                return (
-                                  <tr className="bg-amber-950/10">
-                                    <td colSpan={3} className="py-2 pl-12 pr-4 text-[10px] text-amber-500 font-semibold border-t border-gray-800/30">
-                                      <div className="flex items-center gap-1.5">
-                                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                                        <span>El objetivo de los instrumentos en esta clase suma {sumTargets.toFixed(1)}% (debería ser 100.0%).</span>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              }
-                              return null;
-                            })()}
-                            
                             {isExpanded && seccionHoldings.length === 0 && (
                               <tr className="bg-gray-900/30">
                                 <td colSpan={3} className="py-3 px-12 text-xs text-gray-500 italic">
@@ -1512,102 +1519,165 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Columna Derecha: Gráfico de Dona y Simulador de Rebalanceo */}
-              <div className="space-y-6">
-                
-                {/* Gráfico de Dona */}
-                <div className="gostock-box p-6 space-y-4">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">Distribución de Activos</h3>
-                  <div className="h-56 flex items-center justify-center">
-                    {pieData.length === 0 ? (
-                      <span className="text-xs text-gray-500">Sin posiciones invertidas</span>
-                    ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={pieData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={60}
-                            outerRadius={80}
-                            paddingAngle={3}
-                            dataKey="value"
-                          >
-                            {pieData.map((entry: any, index: number) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip 
-                            formatter={(value: any) => [`$${value.toLocaleString()}`, "Valuación"]}
-                            contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '12px' }}
-                            labelStyle={{ color: '#fff' }}
-                          />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
+              {/* Columna Derecha: 4 Gráficos Interactivos */}
+              <div className="gostock-box p-6 space-y-4">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">Distribución Visual</h3>
+
+                {/* Tabs de Gráficos */}
+                <div className="flex gap-1 bg-gray-950/60 rounded-xl p-1 border border-gray-800/60">
+                  {[
+                    { key: 'clases', label: 'x Clase' },
+                    { key: 'propietarios', label: 'x Dueño' },
+                    { key: 'total_clases', label: 'Total Clases' },
+                    { key: 'total_prop', label: 'Total Dueños' },
+                  ].map((tab) => (
+                    <button
+                      key={tab.key}
+                      onClick={() => setActiveChartTab(tab.key as any)}
+                      className={`flex-1 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-lg transition cursor-pointer ${
+                        activeChartTab === tab.key
+                          ? 'bg-amber-500 text-slate-900'
+                          : 'text-gray-500 hover:text-white'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
 
-                {/* Simulador de Aportaciones (Rebalanceo Inteligente) */}
-                <div className="gostock-box p-6 space-y-5">
-                  <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400">¿Cuánto vas a invertir hoy?</h4>
-                    <p className="text-[10px] text-gray-500">Distribución óptima sin vender activos (Optimización Fiscal)</p>
-                  </div>
-
+                {/* GRÁFICO: x Clase (Dona) */}
+                {activeChartTab === 'clases' && (
                   <div className="space-y-3">
-                    <div className="relative">
-                      <span className="absolute left-4 top-2 text-sm text-gray-500 font-mono font-bold">$</span>
-                      <input 
-                        type="number"
-                        value={rebalanceAmount}
-                        onChange={(e) => {
-                          setRebalanceAmount(e.target.value);
-                          calculateRebalanceOffline(status, parseFloat(e.target.value) || 0);
-                        }}
-                        placeholder="Monto de aportación"
-                        className="w-full bg-[#111827] [data-theme='light']:bg-white border border-gray-800 [data-theme='light']:border-gray-300 rounded-xl pl-8 pr-12 py-1.5 text-xs font-mono font-bold text-white [data-theme='light']:text-gray-900 focus:outline-none focus:border-amber-500 transition"
-                      />
-                      <span className="absolute right-4 top-2 text-[9px] text-gray-500 font-black">{status?.moneda || 'USD'}</span>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={handleCalculateRebalance}
-                        disabled={calculatingRebalance}
-                        className="gostock-btn-primary py-2 text-[11px] flex-1 font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        {calculatingRebalance && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                        Calcular
-                      </button>
-                      {rebalanceResults.length > 0 && (
-                        <button 
-                          onClick={handleApplyRebalance}
-                          disabled={applyingRebalance}
-                          className="border border-amber-500/40 text-amber-500 hover:bg-amber-500/10 py-2 text-[11px] flex-1 font-bold uppercase tracking-wider flex items-center justify-center gap-1 rounded-xl cursor-pointer"
-                        >
-                          {applyingRebalance && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                          Aplicar
-                        </button>
+                    <div className="h-48 flex items-center justify-center">
+                      {pieData.length === 0 ? (
+                        <span className="text-xs text-gray-500">Sin posiciones</span>
+                      ) : (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={72} paddingAngle={3} dataKey="value">
+                              {pieData.map((entry: any, index: number) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              formatter={(value: any) => [`$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Valor']}
+                              contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '10px', fontSize: '11px' }}
+                              labelStyle={{ color: '#fff', fontWeight: 'bold' }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
                       )}
                     </div>
-                  </div>
-
-                  {rebalanceResults.length > 0 && (
-                    <div className="space-y-2 border-t border-gray-800/80 pt-3">
-                      <span className="text-[10px] text-gray-500 uppercase tracking-widest font-black block mb-2">Sugerencia de Distribución</span>
-                      {rebalanceResults.map((rec: any, idx: number) => (
-                        <div key={rec.nombre_seccion} className="flex justify-between items-center bg-gray-950/40 [data-theme='light']:bg-gray-100 p-2.5 rounded-lg border border-gray-800 [data-theme='light']:border-gray-200">
-                          <span className="text-gray-400 [data-theme='light']:text-gray-600 font-bold truncate max-w-[120px]">{rec.nombre_seccion}</span>
-                          <div className="text-right font-mono">
-                            <span className="text-amber-500 font-bold block">${rec.monto_sugerido.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}</span>
-                            <span className="text-[9px] text-gray-500">{rec.porcentaje_sugerido.toFixed(0)}% de aportación</span>
+                    <div className="space-y-1">
+                      {pieData.map((item: any) => (
+                        <div key={item.name} className="flex items-center justify-between text-[10px]">
+                          <div className="flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: item.color }}></span>
+                            <span className="text-gray-400 font-medium">{item.name}</span>
+                          </div>
+                          <div className="flex gap-3 font-mono">
+                            <span className="text-gray-300 font-bold">{item.percentage.toFixed(1)}%</span>
+                            <span className="text-gray-500">${item.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                           </div>
                         </div>
                       ))}
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
+
+                {/* GRÁFICO: x Dueño (Dona) */}
+                {activeChartTab === 'propietarios' && (
+                  <div className="space-y-3">
+                    <div className="h-48 flex items-center justify-center">
+                      {propietarioData.length === 0 ? (
+                        <span className="text-xs text-gray-500">Sin posiciones</span>
+                      ) : (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie data={propietarioData} cx="50%" cy="50%" innerRadius={50} outerRadius={72} paddingAngle={3} dataKey="value">
+                              {propietarioData.map((entry: any, index: number) => (
+                                <Cell key={`cell-prop-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              formatter={(value: any) => [`$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Valor']}
+                              contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '10px', fontSize: '11px' }}
+                              labelStyle={{ color: '#fff', fontWeight: 'bold' }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      {propietarioData.map((item: any) => (
+                        <div key={item.name} className="flex items-center justify-between text-[10px]">
+                          <div className="flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: item.color }}></span>
+                            <span className="text-gray-400 font-medium">{item.name}</span>
+                          </div>
+                          <div className="flex gap-3 font-mono">
+                            <span className="text-gray-300 font-bold">{item.percentage.toFixed(1)}%</span>
+                            <span className="text-gray-500">${item.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* GRÁFICO: Total Clases (Barras horizontales) */}
+                {activeChartTab === 'total_clases' && (
+                  <div className="h-64">
+                    {pieData.length === 0 ? (
+                      <div className="h-full flex items-center justify-center">
+                        <span className="text-xs text-gray-500">Sin posiciones</span>
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={pieData} layout="vertical" margin={{ left: 16, right: 24, top: 4, bottom: 4 }}>
+                          <XAxis type="number" hide />
+                          <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: '#9ca3af' }} width={72} />
+                          <Tooltip
+                            formatter={(value: any) => [`$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Valor']}
+                            contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '10px', fontSize: '11px' }}
+                          />
+                          <Bar dataKey="value" radius={[0, 6, 6, 0]}>
+                            {pieData.map((entry: any, index: number) => (
+                              <Cell key={`bar-clase-${index}`} fill={entry.color} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                )}
+
+                {/* GRÁFICO: Total Propietarios (Barras horizontales) */}
+                {activeChartTab === 'total_prop' && (
+                  <div className="h-64">
+                    {propietarioData.length === 0 ? (
+                      <div className="h-full flex items-center justify-center">
+                        <span className="text-xs text-gray-500">Sin posiciones</span>
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={propietarioData} layout="vertical" margin={{ left: 16, right: 24, top: 4, bottom: 4 }}>
+                          <XAxis type="number" hide />
+                          <YAxis type="category" dataKey="name" tick={{ fontSize: 9, fill: '#9ca3af' }} width={60} />
+                          <Tooltip
+                            formatter={(value: any) => [`$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 'Valor']}
+                            contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '10px', fontSize: '11px' }}
+                          />
+                          <Bar dataKey="value" radius={[0, 6, 6, 0]}>
+                            {propietarioData.map((entry: any, index: number) => (
+                              <Cell key={`bar-prop-${index}`} fill={entry.color} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                )}
 
               </div>
             </div>
