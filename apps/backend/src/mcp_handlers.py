@@ -420,9 +420,10 @@ class MCPRequestHandler:
             secciones_target = portfolio.get('portafolio_secciones', [])
             target_map = {sec['nombre_seccion']: float(sec['porcentaje_objetivo']) for sec in secciones_target}
             
-            # Obtener mapeo de nombres desde el catálogo de instrumentos
-            meta_res = self.supabase.table('instrumentos_metadata').select('ticker, nombre').execute()
+            # Obtener mapeo de nombres y comisiones desde el catálogo de instrumentos
+            meta_res = self.supabase.table('instrumentos_metadata').select('ticker, nombre, comision').execute()
             names_map = {item['ticker']: item['nombre'] for item in meta_res.data} if meta_res.data else {}
+            comisiones_map = {item['ticker']: str(item.get('comision') or '0').replace('%', '') for item in meta_res.data} if meta_res.data else {}
             
             # 2. Obtener todas las operaciones completadas
             op_res = self.supabase.table('operaciones').select('*, transacciones(*)').eq('portafolio_id', portfolio_id).eq('status', 'completed').execute()
@@ -516,7 +517,8 @@ class MCPRequestHandler:
                         "valor_actual": float(current_value),
                         "pnl": float(pnl),
                         "pnl_percent": float(pnl_percent),
-                        "is_manual": is_manual
+                        "is_manual": is_manual,
+                        "comision_anual": comisiones_map.get(ticker, "0")
                     })
                     
             # 5. Calcular valor total de portafolio y porcentajes reales de secciones

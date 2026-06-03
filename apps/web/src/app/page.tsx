@@ -1130,11 +1130,11 @@ export default function DashboardPage() {
                     <thead>
                       <tr className="border-b border-gray-800 text-[10px] text-gray-500 font-bold uppercase tracking-wider">
                         <th className="pb-3 pl-8 text-white [data-theme='light']:text-gray-900">Clase / Instrumento</th>
-                        <th className="pb-3 text-center text-white [data-theme='light']:text-gray-900">Actual (%)</th>
-                        <th className="pb-3 text-center text-white [data-theme='light']:text-gray-900">Comisión %</th>
-                        <th className="pb-3 text-center text-white [data-theme='light']:text-gray-900">Ratio Pond.</th>
-                        <th className="pb-3 text-right text-white [data-theme='light']:text-gray-900">Costo Comisión</th>
-                        <th className="pb-3 text-right text-white [data-theme='light']:text-gray-900">Inversión Actual</th>
+                        <th className="pb-3 px-2 text-center text-white [data-theme='light']:text-gray-900 whitespace-nowrap">Actual (%)</th>
+                        <th className="pb-3 px-2 text-center text-white [data-theme='light']:text-gray-900 whitespace-nowrap">Comisión %</th>
+                        <th className="pb-3 px-2 text-center text-white [data-theme='light']:text-gray-900 whitespace-nowrap">Ratio Pond.</th>
+                        <th className="pb-3 px-2 text-right text-white [data-theme='light']:text-gray-900 whitespace-nowrap">Costo Comisión</th>
+                        <th className="pb-3 pl-2 text-right text-white [data-theme='light']:text-gray-900 whitespace-nowrap">Inversión Actual</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-800/40 text-xs">
