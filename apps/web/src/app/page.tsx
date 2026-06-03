@@ -1200,59 +1200,22 @@ export default function DashboardPage() {
                                       </div>
                                     </td>
                                     
-                                      {editingTicker === editKey ? (
-                                        <input
-                                          type="number"
-                                          value={editValue}
-                                          onChange={(e) => setEditValue(e.target.value)}
-                                          onBlur={() => handleSaveInstrumentTarget(h.ticker, sec.nombre_seccion)}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleSaveInstrumentTarget(h.ticker, sec.nombre_seccion);
-                                            if (e.key === 'Escape') setEditingTicker(null);
-                                          }}
-                                          className="w-16 bg-[#111827] border border-amber-500 text-center font-mono text-white text-xs rounded py-0.5 focus:outline-none"
-                                          autoFocus
-                                          step="0.1"
-                                          min="0"
-                                          max="100"
-                                        />
-                                      ) : (
-                                        <div 
-                                          className="group inline-flex items-center justify-center gap-1 cursor-pointer hover:bg-gray-800/60 px-2 py-0.5 rounded transition"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setEditingTicker(editKey);
-                                            setEditValue((h.porcentaje_objetivo_clase || 0).toString());
-                                          }}
-                                        >
-                                          <span className="font-mono text-gray-300 font-bold">{(h.porcentaje_objetivo_clase || 0).toFixed(1)}%</span>
-                                          <Edit2 className="h-3 w-3 text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                        </div>
-                                      )}
-                                      <div className="text-[9px] text-gray-500 mt-0.5">({(h.porcentaje_objetivo_total || 0).toFixed(2)}% total)</div>
-                                    </td>
-
-                                    {/* Col 3: Actual % */}
+                                    {/* Col 2: Actual % */}
                                     <td className="py-2.5 text-center font-mono">
                                       <div className="text-gray-300">{(h.porcentaje_real_clase || 0).toFixed(1)}%</div>
                                       <div className="text-[9px] text-gray-500 mt-0.5">({(h.porcentaje_real_total || 0).toFixed(2)}% total)</div>
                                     </td>
 
-                                    {/* Col 4: Inversión Actual */}
+                                    {/* Col 3: Inversión Actual */}
                                     <td className="py-2.5 text-right font-mono text-white [data-theme='light']:text-gray-900">
                                       ${h.valor_actual.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}
-                                    </td>
-
-                                    {/* Col 5: Diferencia */}
-                                    <td className={`py-2.5 text-right font-mono font-bold ${h.desviacion_valor >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                                      {h.desviacion_valor >= 0 ? "+" : ""}${h.desviacion_valor.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}
                                     </td>
                                   </tr>
 
                                   {/* RENDERIZAR EDICIÓN DEL SUBPORTAFOLIO */}
                                   {isConfiguringThis && (
                                     <tr className="bg-slate-900/40 border-t border-b border-gray-800">
-                                      <td colSpan={5} className="py-4 pl-16 pr-6">
+                                      <td colSpan={3} className="py-4 pl-16 pr-6">
                                         <div className="bg-[#111827] border border-gray-800 rounded-2xl p-5 space-y-4">
                                           <div className="flex justify-between items-center pb-2 border-b border-gray-800">
                                             <h4 className="text-xs font-black uppercase text-amber-500 tracking-wider">
@@ -1394,7 +1357,7 @@ export default function DashboardPage() {
                                   {/* RENDERIZAR DETALLES DEL SUBPORTAFOLIO */}
                                   {isSubPortfolioExpanded && hasSubPortfolio && (
                                     <tr className="bg-slate-950/20 border-t border-gray-800/10">
-                                      <td colSpan={5} className="py-3 pl-16 pr-6">
+                                      <td colSpan={3} className="py-3 pl-16 pr-6">
                                         <div className="bg-slate-900/30 border border-gray-800/60 rounded-xl p-4 space-y-3">
                                           <div className="flex justify-between items-center">
                                             <span className="text-[10px] text-gray-500 font-black uppercase tracking-wider">
@@ -1510,7 +1473,7 @@ export default function DashboardPage() {
                               if (Math.abs(sumTargets - 100.0) > 0.05) {
                                 return (
                                   <tr className="bg-amber-950/10">
-                                    <td colSpan={5} className="py-2 pl-12 pr-4 text-[10px] text-amber-500 font-semibold border-t border-gray-800/30">
+                                    <td colSpan={3} className="py-2 pl-12 pr-4 text-[10px] text-amber-500 font-semibold border-t border-gray-800/30">
                                       <div className="flex items-center gap-1.5">
                                         <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                                         <span>El objetivo de los instrumentos en esta clase suma {sumTargets.toFixed(1)}% (debería ser 100.0%).</span>
@@ -1524,7 +1487,7 @@ export default function DashboardPage() {
                             
                             {isExpanded && seccionHoldings.length === 0 && (
                               <tr className="bg-gray-900/30">
-                                <td colSpan={5} className="py-3 px-12 text-xs text-gray-500 italic">
+                                <td colSpan={3} className="py-3 px-12 text-xs text-gray-500 italic">
                                   Sin instrumentos en esta clase
                                 </td>
                               </tr>
@@ -1534,19 +1497,13 @@ export default function DashboardPage() {
                       })}
                       {/* Fila de Totales de la Tabla Principal */}
                       {displaySecciones.length > 0 && (() => {
-                        const totalObjetivo = displaySecciones.reduce((sum: number, s: any) => sum + (s.porcentaje_objetivo || 0), 0);
                         const totalReal = displaySecciones.reduce((sum: number, s: any) => sum + (s.porcentaje_real || 0), 0);
                         const totalActual = displaySecciones.reduce((sum: number, s: any) => sum + (s.valor_actual || 0), 0);
-                        const totalDiff = totalActual - (totalObjetivo / 100 * displayTotalValue);
                         return (
                           <tr className="border-t-2 border-gray-700 bg-gray-900/50 font-bold">
                             <td className="py-4 pl-8 text-white [data-theme='light']:text-gray-900 font-extrabold uppercase">Total</td>
-                            <td className="py-4 text-center font-mono text-gray-300">{totalObjetivo.toFixed(1)}%</td>
                             <td className="py-4 text-center font-mono text-gray-300">{totalReal.toFixed(1)}%</td>
                             <td className="py-4 text-right font-mono text-white [data-theme='light']:text-gray-900">${totalActual.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}</td>
-                            <td className={`py-4 text-right font-mono ${totalDiff >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                              {totalDiff >= 0 ? "+" : ""}${totalDiff.toLocaleString(undefined, { minimumFractionDigits: 2 })} {status?.moneda || 'USD'}
-                            </td>
                           </tr>
                         );
                       })()}
